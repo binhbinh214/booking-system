@@ -47,14 +47,11 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 // Allowed origins from env (comma separated) or defaults for local dev
-const allowedOrigins = (
-  process.env.FRONTEND_URLS ||
-  process.env.FRONTEND_URL ||
+const allowedOrigins =
   "http://localhost:3000,http://localhost:4000,https://booking-system-phi-eight.vercel.app,https://booking-system-erop.onrender.com,https://booking-system-7v5zyxlw4-trn-lng-binhs-projects.vercel.app"
-)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 console.log("🌐 Allowed Origins:", allowedOrigins);
 
