@@ -50,7 +50,7 @@ app.use("/api/", limiter);
 const allowedOrigins = (
   process.env.FRONTEND_URLS ||
   process.env.FRONTEND_URL ||
-  "http://localhost:3000,http://localhost:4000,https://booking-system-phi-eight.vercel.app"
+  "http://localhost:3000,http://localhost:4000,https://booking-system-phi-eight.vercel.app,https://booking-system-erop.onrender.com"
 )
   .split(",")
   .map((s) => s.trim())
