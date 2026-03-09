@@ -136,7 +136,6 @@ paymentSchema.pre("save", function (next) {
 
 // Indexes
 paymentSchema.index({ user: 1, createdAt: -1 });
-paymentSchema.index({ transactionId: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ type: 1 });
 paymentSchema.index({ appointment: 1 });
