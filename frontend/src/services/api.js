@@ -1,64 +1,72 @@
 import axios from "axios";
 
-// Determine API URL based on environment
-const getApiUrl = () => {
-  const hostname = window.location.hostname;
-  const port = window.location.port;
-  const protocol = window.location.protocol;
-
-  console.log("🌐 Detecting environment:", { hostname, port, protocol });
-
-  // Ngrok URLs - use same origin (proxy handles routing)
-  if (
-    hostname.includes(".ngrok.io") ||
-    hostname.includes(".ngrok-free.app") ||
-    hostname.includes(".ngrok-free.dev")
-  ) {
-    const apiUrl = `${protocol}//${hostname}/api`;
-    console.log("🔗 Using ngrok API URL:", apiUrl);
-    return apiUrl;
-  }
-
-  // Local development with proxy (port 4000)
-  if (port === "4000") {
-    return `${protocol}//${hostname}:${port}/api`;
-  }
-
-  // Default local development (port 3000 -> backend 5000)
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
+/**
+ * Resolve API base URL:
+ * - Prefer REACT_APP_API_URL (set in Vercel for production)
+ * - For dev (localhost) use REACT_APP_API_URL or default http://localhost:5000/api
+ * - As last resort use same-origin + /api (only when you intentionally host backend on same origin)
+ */
+const resolveApiUrl = () => {
+  if (typeof window === "undefined") {
+    // server-side or build-time fallback (shouldn't be used in CRA runtime)
     return process.env.REACT_APP_API_URL || "http://localhost:5000/api";
   }
 
-  // Fallback - relative path
-  return "/api";
+  // 1) explicit env set at build time (Vercel/Netlify)
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/+$/, ""); // remove trailing slash
+  }
+
+  const { protocol, hostname, port } = window.location;
+
+  // 2) local dev: localhost -> default backend port 5000
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return "http://localhost:5000/api";
+  }
+
+  // 3) ngrok / preview domains - assume backend sits on same origin + /api
+  if (
+    hostname.includes(".ngrok.io") ||
+    hostname.includes(".ngrok-free.app") ||
+    hostname.includes(".now.sh") ||
+    hostname.includes("vercel.app")
+  ) {
+    return `${protocol}//${hostname}${port ? `:${port}` : ""}/api`;
+  }
+
+  // 4) production same-origin fallback
+  return `${protocol}//${hostname}${port ? `:${port}` : ""}/api`;
 };
 
-const API_URL = getApiUrl();
-
-console.log("🔗 Final API URL:", API_URL);
+const API_BASE = resolveApiUrl();
+console.log("🔗 Final API URL:", API_BASE);
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE,
   headers: {
     "Content-Type": "application/json",
   },
   timeout: 30000,
+  withCredentials: true,
 });
 
-// Request interceptor - add token to requests
+// Attach token from localStorage if present
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const token = localStorage.getItem("token");
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (e) {
+      // ignore localStorage errors
     }
 
     console.log(
-      `📤 API Request: ${config.method?.toUpperCase()} ${config.baseURL}${
-        config.url
-      }`
+      `📤 API Request: ${config.method?.toUpperCase() || "GET"} ${
+        config.baseURL
+      }${config.url}`
     );
-
     return config;
   },
   (error) => {
@@ -67,7 +75,6 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - handle errors
 api.interceptors.response.use(
   (response) => {
     console.log(`📥 API Response: ${response.status} ${response.config.url}`);
@@ -82,10 +89,10 @@ api.interceptors.response.use(
     });
 
     if (error.response?.status === 401) {
-      console.warn("🔐 Authentication failed - clearing tokens");
-      localStorage.removeItem("token");
-      localStorage.removeItem("persist:mental-healthcare");
-
+      try {
+        localStorage.removeItem("token");
+        localStorage.removeItem("persist:mental-healthcare");
+      } catch (e) {}
       if (
         !window.location.pathname.includes("/login") &&
         !window.location.pathname.includes("/register") &&
@@ -101,31 +108,37 @@ api.interceptors.response.use(
 
 export const checkApiHealth = async () => {
   try {
-    const response = await api.get("/health");
-    console.log("✅ API Health Check:", response.data);
-    return response.data;
-  } catch (error) {
-    console.error("❌ API Health Check Failed:", error.message);
-    throw error;
+    const res = await api.get("/health");
+    return res.data;
+  } catch (err) {
+    console.error("❌ API Health Check Failed:", err.message);
+    throw err;
   }
 };
 
-export const getCurrentApiUrl = () => API_URL;
+export const getCurrentApiUrl = () => API_BASE;
 
 export const setAuthToken = (token) => {
   if (token) {
     api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-    localStorage.setItem("token", token);
+    try {
+      localStorage.setItem("token", token);
+    } catch (e) {}
   } else {
     delete api.defaults.headers.common["Authorization"];
-    localStorage.removeItem("token");
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("persist:mental-healthcare");
+    } catch (e) {}
   }
 };
 
 export const clearAuth = () => {
-  localStorage.removeItem("token");
-  localStorage.removeItem("persist:mental-healthcare");
   delete api.defaults.headers.common["Authorization"];
+  try {
+    localStorage.removeItem("token");
+    localStorage.removeItem("persist:mental-healthcare");
+  } catch (e) {}
 };
 
 export default api;
