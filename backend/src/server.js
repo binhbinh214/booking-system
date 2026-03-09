@@ -149,7 +149,7 @@ app.use("/api/payments", require("./routes/payment.routes"));
 app.use("/api/journals", require("./routes/journal.routes"));
 app.use("/api/content", require("./routes/content.routes"));
 app.use("/api/reports", require("./routes/report.routes"));
-app.use("/api/chatbot", require("./routes/chatbot.routes"));
+// app.use("/api/chatbot", require("./routes/chatbot.routes"));
 app.use("/api/messages", require("./routes/message.routes"));
 
 // Request logging helper (dev)
