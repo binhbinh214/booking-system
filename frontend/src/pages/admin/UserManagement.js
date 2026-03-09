@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Box,
   Card,
@@ -25,7 +25,7 @@ import {
   InputLabel,
   Select,
   Avatar,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Search,
   MoreVert,
@@ -33,21 +33,52 @@ import {
   Block,
   CheckCircle,
   Delete,
-  FilterList,
-} from '@mui/icons-material';
+} from "@mui/icons-material";
 
 const mockUsers = [
-  { id: 1, fullName: 'Nguyễn Văn A', email: 'nguyenvana@email.com', phone: '0901234567', role: 'customer', status: 'active', createdAt: '2024-01-15' },
-  { id: 2, fullName: 'BS. Trần Thị B', email: 'bstranb@email.com', phone: '0912345678', role: 'doctor', status: 'active', createdAt: '2024-01-14' },
-  { id: 3, fullName: 'Lê Văn C', email: 'levanc@email.com', phone: '0923456789', role: 'healer', status: 'pending', createdAt: '2024-01-13' },
-  { id: 4, fullName: 'Phạm Thị D', email: 'phamthid@email.com', phone: '0934567890', role: 'customer', status: 'suspended', createdAt: '2024-01-12' },
+  {
+    id: 1,
+    fullName: "Nguyễn Văn A",
+    email: "nguyenvana@email.com",
+    phone: "0901234567",
+    role: "customer",
+    status: "active",
+    createdAt: "2024-01-15",
+  },
+  {
+    id: 2,
+    fullName: "BS. Trần Thị B",
+    email: "bstranb@email.com",
+    phone: "0912345678",
+    role: "doctor",
+    status: "active",
+    createdAt: "2024-01-14",
+  },
+  {
+    id: 3,
+    fullName: "Lê Văn C",
+    email: "levanc@email.com",
+    phone: "0923456789",
+    role: "healer",
+    status: "pending",
+    createdAt: "2024-01-13",
+  },
+  {
+    id: 4,
+    fullName: "Phạm Thị D",
+    email: "phamthid@email.com",
+    phone: "0934567890",
+    role: "customer",
+    status: "suspended",
+    createdAt: "2024-01-12",
+  },
 ];
 
 const UserManagement = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState('');
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [anchorEl, setAnchorEl] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
@@ -63,44 +94,68 @@ const UserManagement = () => {
 
   const getRoleColor = (role) => {
     switch (role) {
-      case 'admin': return 'error';
-      case 'doctor': return 'primary';
-      case 'healer': return 'success';
-      default: return 'default';
+      case "admin":
+        return "error";
+      case "doctor":
+        return "primary";
+      case "healer":
+        return "success";
+      default:
+        return "default";
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'success';
-      case 'pending': return 'warning';
-      case 'suspended': return 'error';
-      default: return 'default';
+      case "active":
+        return "success";
+      case "pending":
+        return "warning";
+      case "suspended":
+        return "error";
+      default:
+        return "default";
     }
   };
 
   const getRoleLabel = (role) => {
     switch (role) {
-      case 'admin': return 'Admin';
-      case 'doctor': return 'Bác sĩ';
-      case 'healer': return 'Chuyên gia';
-      case 'customer': return 'Người dùng';
-      default: return role;
+      case "admin":
+        return "Admin";
+      case "doctor":
+        return "Bác sĩ";
+      case "healer":
+        return "Chuyên gia";
+      case "customer":
+        return "Người dùng";
+      default:
+        return role;
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'active': return 'Hoạt động';
-      case 'pending': return 'Chờ duyệt';
-      case 'suspended': return 'Tạm khóa';
-      default: return status;
+      case "active":
+        return "Hoạt động";
+      case "pending":
+        return "Chờ duyệt";
+      case "suspended":
+        return "Tạm khóa";
+      default:
+        return status;
     }
   };
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Quản lý người dùng
         </Typography>
@@ -111,7 +166,7 @@ const UserManagement = () => {
 
       <Card>
         {/* Filters */}
-        <Box sx={{ p: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ p: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
           <TextField
             size="small"
             placeholder="Tìm kiếm..."
@@ -160,7 +215,7 @@ const UserManagement = () => {
               {mockUsers.map((user) => (
                 <TableRow key={user.id} hover>
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <Avatar sx={{ width: 36, height: 36 }}>
                         {user.fullName.charAt(0)}
                       </Avatar>
@@ -201,13 +256,19 @@ const UserManagement = () => {
           page={page}
           onPageChange={(e, newPage) => setPage(newPage)}
           rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(e) => setRowsPerPage(parseInt(e.target.value, 10))}
+          onRowsPerPageChange={(e) =>
+            setRowsPerPage(parseInt(e.target.value, 10))
+          }
           labelRowsPerPage="Số hàng mỗi trang:"
         />
       </Card>
 
       {/* Action Menu */}
-      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
         <MenuItem onClick={handleMenuClose}>
           <Edit fontSize="small" sx={{ mr: 1 }} /> Chỉnh sửa
         </MenuItem>
@@ -217,16 +278,21 @@ const UserManagement = () => {
         <MenuItem onClick={handleMenuClose}>
           <Block fontSize="small" sx={{ mr: 1 }} /> Tạm khóa
         </MenuItem>
-        <MenuItem onClick={handleMenuClose} sx={{ color: 'error.main' }}>
+        <MenuItem onClick={handleMenuClose} sx={{ color: "error.main" }}>
           <Delete fontSize="small" sx={{ mr: 1 }} /> Xóa
         </MenuItem>
       </Menu>
 
       {/* Add User Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={openDialog}
+        onClose={() => setOpenDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Thêm người dùng mới</DialogTitle>
         <DialogContent>
-          <Box sx={{ pt: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ pt: 1, display: "flex", flexDirection: "column", gap: 2 }}>
             <TextField fullWidth label="Họ tên" />
             <TextField fullWidth label="Email" type="email" />
             <TextField fullWidth label="Số điện thoại" />

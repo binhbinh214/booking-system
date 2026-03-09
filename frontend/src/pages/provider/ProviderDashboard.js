@@ -1,5 +1,5 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+import React from "react";
+import { useSelector } from "react-redux";
 import {
   Box,
   Grid,
@@ -15,25 +15,42 @@ import {
   Chip,
   Divider,
   LinearProgress,
-} from '@mui/material';
+} from "@mui/material";
 import {
   CalendarMonth,
   People,
   Star,
   AccountBalanceWallet,
-  TrendingUp,
   Schedule,
-} from '@mui/icons-material';
+} from "@mui/icons-material";
 
 const upcomingAppointments = [
-  { id: 1, patient: 'Nguyễn Văn A', time: '09:00', type: 'Tư vấn', status: 'confirmed' },
-  { id: 2, patient: 'Trần Thị B', time: '10:30', type: 'Theo dõi', status: 'pending' },
-  { id: 3, patient: 'Lê Văn C', time: '14:00', type: 'Tư vấn', status: 'confirmed' },
+  {
+    id: 1,
+    patient: "Nguyễn Văn A",
+    time: "09:00",
+    type: "Tư vấn",
+    status: "confirmed",
+  },
+  {
+    id: 2,
+    patient: "Trần Thị B",
+    time: "10:30",
+    type: "Theo dõi",
+    status: "pending",
+  },
+  {
+    id: 3,
+    patient: "Lê Văn C",
+    time: "14:00",
+    type: "Tư vấn",
+    status: "confirmed",
+  },
 ];
 
 const ProviderDashboard = () => {
   const { user } = useSelector((state) => state.auth);
-  const isDoctor = user?.role === 'doctor';
+  const isDoctor = user?.role === "doctor";
 
   return (
     <Box>
@@ -42,25 +59,26 @@ const ProviderDashboard = () => {
         sx={{
           mb: 3,
           background: isDoctor
-            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-            : 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-          color: 'white',
+            ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+            : "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)",
+          color: "white",
         }}
       >
         <CardContent sx={{ py: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             <Avatar
               src={user?.avatar}
-              sx={{ width: 64, height: 64, border: '3px solid white' }}
+              sx={{ width: 64, height: 64, border: "3px solid white" }}
             >
               {user?.fullName?.charAt(0)}
             </Avatar>
             <Box>
               <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                Xin chào, {isDoctor ? 'BS.' : ''} {user?.fullName}!
+                Xin chào, {isDoctor ? "BS." : ""} {user?.fullName}!
               </Typography>
               <Typography sx={{ opacity: 0.9 }}>
-                {isDoctor ? 'Bác sĩ tâm lý' : 'Chuyên gia tư vấn'} | {user?.specialization || 'Tâm lý học'}
+                {isDoctor ? "Bác sĩ tâm lý" : "Chuyên gia tư vấn"} |{" "}
+                {user?.specialization || "Tâm lý học"}
               </Typography>
             </Box>
           </Box>
@@ -72,7 +90,13 @@ const ProviderDashboard = () => {
         <Grid item xs={6} md={3}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     Lịch hẹn hôm nay
@@ -81,7 +105,7 @@ const ProviderDashboard = () => {
                     5
                   </Typography>
                 </Box>
-                <Avatar sx={{ bgcolor: '#667eea20', color: '#667eea' }}>
+                <Avatar sx={{ bgcolor: "#667eea20", color: "#667eea" }}>
                   <CalendarMonth />
                 </Avatar>
               </Box>
@@ -91,7 +115,13 @@ const ProviderDashboard = () => {
         <Grid item xs={6} md={3}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     Tổng bệnh nhân
@@ -100,7 +130,7 @@ const ProviderDashboard = () => {
                     128
                   </Typography>
                 </Box>
-                <Avatar sx={{ bgcolor: '#764ba220', color: '#764ba2' }}>
+                <Avatar sx={{ bgcolor: "#764ba220", color: "#764ba2" }}>
                   <People />
                 </Avatar>
               </Box>
@@ -110,7 +140,13 @@ const ProviderDashboard = () => {
         <Grid item xs={6} md={3}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     Đánh giá
@@ -119,7 +155,7 @@ const ProviderDashboard = () => {
                     4.8
                   </Typography>
                 </Box>
-                <Avatar sx={{ bgcolor: '#ff980020', color: '#ff9800' }}>
+                <Avatar sx={{ bgcolor: "#ff980020", color: "#ff9800" }}>
                   <Star />
                 </Avatar>
               </Box>
@@ -129,7 +165,13 @@ const ProviderDashboard = () => {
         <Grid item xs={6} md={3}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     Thu nhập tháng
@@ -138,7 +180,7 @@ const ProviderDashboard = () => {
                     12.5M
                   </Typography>
                 </Box>
-                <Avatar sx={{ bgcolor: '#4caf5020', color: '#4caf50' }}>
+                <Avatar sx={{ bgcolor: "#4caf5020", color: "#4caf50" }}>
                   <AccountBalanceWallet />
                 </Avatar>
               </Box>
@@ -152,7 +194,14 @@ const ProviderDashboard = () => {
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mb: 2,
+                }}
+              >
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Lịch hẹn hôm nay
                 </Typography>
@@ -168,17 +217,29 @@ const ProviderDashboard = () => {
                       <ListItemText
                         primary={apt.patient}
                         secondary={
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
                             <Schedule fontSize="small" sx={{ fontSize: 14 }} />
                             {apt.time} - {apt.type}
                           </Box>
                         }
                       />
-                      <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Box sx={{ display: "flex", gap: 1 }}>
                         <Chip
-                          label={apt.status === 'confirmed' ? 'Đã xác nhận' : 'Chờ duyệt'}
+                          label={
+                            apt.status === "confirmed"
+                              ? "Đã xác nhận"
+                              : "Chờ duyệt"
+                          }
                           size="small"
-                          color={apt.status === 'confirmed' ? 'success' : 'warning'}
+                          color={
+                            apt.status === "confirmed" ? "success" : "warning"
+                          }
                         />
                         <Button size="small" variant="outlined">
                           Chi tiết
@@ -202,25 +263,61 @@ const ProviderDashboard = () => {
                 Hiệu suất tháng này
               </Typography>
               <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">Tỷ lệ hoàn thành</Typography>
-                  <Typography variant="body2" fontWeight={500}>92%</Typography>
+                  <Typography variant="body2" fontWeight={500}>
+                    92%
+                  </Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={92} color="success" />
+                <LinearProgress
+                  variant="determinate"
+                  value={92}
+                  color="success"
+                />
               </Box>
               <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">Đánh giá tích cực</Typography>
-                  <Typography variant="body2" fontWeight={500}>96%</Typography>
+                  <Typography variant="body2" fontWeight={500}>
+                    96%
+                  </Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={96} color="primary" />
+                <LinearProgress
+                  variant="determinate"
+                  value={96}
+                  color="primary"
+                />
               </Box>
               <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">Tỷ lệ quay lại</Typography>
-                  <Typography variant="body2" fontWeight={500}>78%</Typography>
+                  <Typography variant="body2" fontWeight={500}>
+                    78%
+                  </Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={78} color="secondary" />
+                <LinearProgress
+                  variant="determinate"
+                  value={78}
+                  color="secondary"
+                />
               </Box>
             </CardContent>
           </Card>
@@ -231,7 +328,7 @@ const ProviderDashboard = () => {
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                 Thao tác nhanh
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Button variant="outlined" fullWidth>
                   Cập nhật lịch làm việc
                 </Button>

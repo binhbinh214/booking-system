@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -73,14 +73,9 @@ const Dashboard = () => {
   const [recentAppointments, setRecentAppointments] = useState([]);
   const [recentJournals, setRecentJournals] = useState([]);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch all data in parallel
       const [appointmentsRes, journalsRes] = await Promise.all([
         appointmentService.getMyAppointments({ limit: 20 }).catch((err) => {
           console.error("Appointments API error:", err);
@@ -205,8 +200,10 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
-
+  }, []);
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
   // Calculate average mood score from journals
   const calculateMoodScore = (journals) => {
     if (!journals || journals.length === 0) return 0;

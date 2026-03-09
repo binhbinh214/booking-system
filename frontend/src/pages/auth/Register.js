@@ -1,13 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import {
   Card,
   CardContent,
   TextField,
   Button,
   Typography,
-  Box,
   InputAdornment,
   IconButton,
   Alert,
@@ -16,24 +15,33 @@ import {
   InputLabel,
   Select,
   MenuItem,
-} from '@mui/material';
-import { Visibility, VisibilityOff, Email, Lock, Person, Phone } from '@mui/icons-material';
-import { useFormik } from 'formik';
-import * as Yup from 'yup';
+} from "@mui/material";
+import {
+  Visibility,
+  VisibilityOff,
+  Email,
+  Lock,
+  Person,
+  Phone,
+} from "@mui/icons-material";
+import { useFormik } from "formik";
+import * as Yup from "yup";
 
-import { register, clearError } from '../../store/slices/authSlice';
+import { register, clearError } from "../../store/slices/authSlice";
 
 const validationSchema = Yup.object({
-  fullName: Yup.string().required('Họ tên không được để trống'),
-  email: Yup.string().email('Email không hợp lệ').required('Email không được để trống'),
-  phone: Yup.string().matches(/^[0-9]{10,11}$/, 'Số điện thoại không hợp lệ'),
+  fullName: Yup.string().required("Họ tên không được để trống"),
+  email: Yup.string()
+    .email("Email không hợp lệ")
+    .required("Email không được để trống"),
+  phone: Yup.string().matches(/^[0-9]{10,11}$/, "Số điện thoại không hợp lệ"),
   password: Yup.string()
-    .min(6, 'Mật khẩu phải có ít nhất 6 ký tự')
-    .required('Mật khẩu không được để trống'),
+    .min(6, "Mật khẩu phải có ít nhất 6 ký tự")
+    .required("Mật khẩu không được để trống"),
   confirmPassword: Yup.string()
-    .oneOf([Yup.ref('password'), null], 'Mật khẩu không khớp')
-    .required('Xác nhận mật khẩu không được để trống'),
-  role: Yup.string().required('Vui lòng chọn vai trò'),
+    .oneOf([Yup.ref("password"), null], "Mật khẩu không khớp")
+    .required("Xác nhận mật khẩu không được để trống"),
+  role: Yup.string().required("Vui lòng chọn vai trò"),
 });
 
 const Register = () => {
@@ -41,9 +49,8 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, error, requireVerification, verificationEmail } = useSelector(
-    (state) => state.auth
-  );
+  const { isLoading, error, requireVerification, verificationEmail } =
+    useSelector((state) => state.auth);
 
   useEffect(() => {
     return () => {
@@ -53,18 +60,18 @@ const Register = () => {
 
   useEffect(() => {
     if (requireVerification && verificationEmail) {
-      navigate('/verify-otp', { state: { email: verificationEmail } });
+      navigate("/verify-otp", { state: { email: verificationEmail } });
     }
   }, [requireVerification, verificationEmail, navigate]);
 
   const formik = useFormik({
     initialValues: {
-      fullName: '',
-      email: '',
-      phone: '',
-      password: '',
-      confirmPassword: '',
-      role: 'customer',
+      fullName: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+      role: "customer",
     },
     validationSchema,
     onSubmit: async (values) => {
@@ -76,7 +83,10 @@ const Register = () => {
   return (
     <Card sx={{ p: 2, borderRadius: 3 }}>
       <CardContent>
-        <Typography variant="h5" sx={{ fontWeight: 600, mb: 3, textAlign: 'center' }}>
+        <Typography
+          variant="h5"
+          sx={{ fontWeight: 600, mb: 3, textAlign: "center" }}
+        >
           Đăng ký tài khoản
         </Typography>
 
@@ -165,7 +175,7 @@ const Register = () => {
             fullWidth
             name="password"
             label="Mật khẩu"
-            type={showPassword ? 'text' : 'password'}
+            type={showPassword ? "text" : "password"}
             placeholder="Nhập mật khẩu"
             value={formik.values.password}
             onChange={formik.handleChange}
@@ -181,7 +191,10 @@ const Register = () => {
               ),
               endAdornment: (
                 <InputAdornment position="end">
-                  <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                  <IconButton
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                  >
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
@@ -193,13 +206,18 @@ const Register = () => {
             fullWidth
             name="confirmPassword"
             label="Xác nhận mật khẩu"
-            type={showConfirmPassword ? 'text' : 'password'}
+            type={showConfirmPassword ? "text" : "password"}
             placeholder="Nhập lại mật khẩu"
             value={formik.values.confirmPassword}
             onChange={formik.handleChange}
             onBlur={formik.handleBlur}
-            error={formik.touched.confirmPassword && Boolean(formik.errors.confirmPassword)}
-            helperText={formik.touched.confirmPassword && formik.errors.confirmPassword}
+            error={
+              formik.touched.confirmPassword &&
+              Boolean(formik.errors.confirmPassword)
+            }
+            helperText={
+              formik.touched.confirmPassword && formik.errors.confirmPassword
+            }
             sx={{ mb: 3 }}
             InputProps={{
               startAdornment: (
@@ -209,7 +227,10 @@ const Register = () => {
               ),
               endAdornment: (
                 <InputAdornment position="end">
-                  <IconButton onClick={() => setShowConfirmPassword(!showConfirmPassword)} edge="end">
+                  <IconButton
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    edge="end"
+                  >
                     {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
@@ -225,12 +246,16 @@ const Register = () => {
             disabled={isLoading}
             sx={{ mb: 2 }}
           >
-            {isLoading ? <CircularProgress size={24} color="inherit" /> : 'Đăng ký'}
+            {isLoading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              "Đăng ký"
+            )}
           </Button>
 
-          <Typography variant="body2" sx={{ textAlign: 'center' }}>
-            Đã có tài khoản?{' '}
-            <Link to="/login" style={{ color: '#667eea', fontWeight: 500 }}>
+          <Typography variant="body2" sx={{ textAlign: "center" }}>
+            Đã có tài khoản?{" "}
+            <Link to="/login" style={{ color: "#667eea", fontWeight: 500 }}>
               Đăng nhập
             </Link>
           </Typography>

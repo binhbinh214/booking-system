@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from "react";
 import {
   Box,
   Grid,
@@ -14,27 +14,68 @@ import {
   Chip,
   Button,
   LinearProgress,
-} from '@mui/material';
+} from "@mui/material";
 import {
   People,
   CalendarMonth,
   Payment,
   Report,
-  TrendingUp,
   PersonAdd,
-} from '@mui/icons-material';
+} from "@mui/icons-material";
 
 const statsCards = [
-  { title: 'Tổng người dùng', value: '1,234', icon: <People />, color: '#667eea', change: '+12%' },
-  { title: 'Lịch hẹn hôm nay', value: '56', icon: <CalendarMonth />, color: '#764ba2', change: '+8%' },
-  { title: 'Doanh thu tháng', value: '45.2M', icon: <Payment />, color: '#11998e', change: '+23%' },
-  { title: 'Báo cáo mới', value: '8', icon: <Report />, color: '#f44336', change: '-5%' },
+  {
+    title: "Tổng người dùng",
+    value: "1,234",
+    icon: <People />,
+    color: "#667eea",
+    change: "+12%",
+  },
+  {
+    title: "Lịch hẹn hôm nay",
+    value: "56",
+    icon: <CalendarMonth />,
+    color: "#764ba2",
+    change: "+8%",
+  },
+  {
+    title: "Doanh thu tháng",
+    value: "45.2M",
+    icon: <Payment />,
+    color: "#11998e",
+    change: "+23%",
+  },
+  {
+    title: "Báo cáo mới",
+    value: "8",
+    icon: <Report />,
+    color: "#f44336",
+    change: "-5%",
+  },
 ];
 
 const recentUsers = [
-  { id: 1, name: 'Nguyễn Văn A', email: 'nguyenvana@email.com', role: 'customer', status: 'active' },
-  { id: 2, name: 'BS. Trần Thị B', email: 'bstranb@email.com', role: 'doctor', status: 'pending' },
-  { id: 3, name: 'Lê Văn C', email: 'levanc@email.com', role: 'healer', status: 'active' },
+  {
+    id: 1,
+    name: "Nguyễn Văn A",
+    email: "nguyenvana@email.com",
+    role: "customer",
+    status: "active",
+  },
+  {
+    id: 2,
+    name: "BS. Trần Thị B",
+    email: "bstranb@email.com",
+    role: "doctor",
+    status: "pending",
+  },
+  {
+    id: 3,
+    name: "Lê Văn C",
+    email: "levanc@email.com",
+    role: "healer",
+    status: "active",
+  },
 ];
 
 const AdminDashboard = () => {
@@ -50,9 +91,19 @@ const AdminDashboard = () => {
           <Grid item xs={12} sm={6} md={3} key={index}>
             <Card>
               <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                  }}
+                >
                   <Box>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      gutterBottom
+                    >
                       {stat.title}
                     </Typography>
                     <Typography variant="h4" sx={{ fontWeight: 700 }}>
@@ -61,11 +112,13 @@ const AdminDashboard = () => {
                     <Chip
                       label={stat.change}
                       size="small"
-                      color={stat.change.startsWith('+') ? 'success' : 'error'}
+                      color={stat.change.startsWith("+") ? "success" : "error"}
                       sx={{ mt: 1 }}
                     />
                   </Box>
-                  <Avatar sx={{ bgcolor: `${stat.color}20`, color: stat.color }}>
+                  <Avatar
+                    sx={{ bgcolor: `${stat.color}20`, color: stat.color }}
+                  >
                     {stat.icon}
                   </Avatar>
                 </Box>
@@ -80,7 +133,14 @@ const AdminDashboard = () => {
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  mb: 2,
+                }}
+              >
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Người dùng mới
                 </Typography>
@@ -105,14 +165,22 @@ const AdminDashboard = () => {
                         <Chip
                           label={user.role}
                           size="small"
-                          color={user.role === 'doctor' ? 'primary' : user.role === 'healer' ? 'success' : 'default'}
+                          color={
+                            user.role === "doctor"
+                              ? "primary"
+                              : user.role === "healer"
+                              ? "success"
+                              : "default"
+                          }
                         />
                       </TableCell>
                       <TableCell>
                         <Chip
                           label={user.status}
                           size="small"
-                          color={user.status === 'active' ? 'success' : 'warning'}
+                          color={
+                            user.status === "active" ? "success" : "warning"
+                          }
                         />
                       </TableCell>
                       <TableCell>
@@ -135,7 +203,7 @@ const AdminDashboard = () => {
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                 Thao tác nhanh
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <Button variant="outlined" startIcon={<PersonAdd />} fullWidth>
                   Thêm người dùng
                 </Button>
@@ -155,25 +223,51 @@ const AdminDashboard = () => {
                 Hoạt động hệ thống
               </Typography>
               <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">CPU</Typography>
                   <Typography variant="body2">45%</Typography>
                 </Box>
                 <LinearProgress variant="determinate" value={45} />
               </Box>
               <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">Memory</Typography>
                   <Typography variant="body2">62%</Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={62} color="secondary" />
+                <LinearProgress
+                  variant="determinate"
+                  value={62}
+                  color="secondary"
+                />
               </Box>
               <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    mb: 1,
+                  }}
+                >
                   <Typography variant="body2">Storage</Typography>
                   <Typography variant="body2">78%</Typography>
                 </Box>
-                <LinearProgress variant="determinate" value={78} color="warning" />
+                <LinearProgress
+                  variant="determinate"
+                  value={78}
+                  color="warning"
+                />
               </Box>
             </CardContent>
           </Card>

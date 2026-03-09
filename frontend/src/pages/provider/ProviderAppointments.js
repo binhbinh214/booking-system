@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Card,
@@ -54,29 +54,41 @@ const ProviderAppointments = () => {
     3: "cancelled",
   };
 
-  useEffect(() => {
-    fetchAppointments();
-  }, [activeTab]);
+  const formatCurrency = (value) =>
+    typeof value === "number" ? `${value.toLocaleString()}đ` : "-";
 
-  const fetchAppointments = async () => {
-    try {
-      setLoading(true);
-      const status = statusMap[activeTab];
+  const fetchAppointments = useCallback(
+    async (signal) => {
+      try {
+        setLoading(true);
+        const status = statusMap[activeTab] || undefined;
 
-      const response = await appointmentService.getProviderAppointments({
-        status,
-      });
+        const response = await appointmentService.getProviderAppointments({
+          status,
+          signal,
+        });
 
-      if (response.data.success) {
-        setAppointments(response.data.data);
+        const data = response?.data?.data || [];
+        setAppointments(data);
+      } catch (error) {
+        if (error?.name === "CanceledError" || error?.message === "canceled") {
+          // fetch aborted
+          return;
+        }
+        console.error("Error fetching appointments:", error);
+        toast.error("Không thể tải danh sách lịch hẹn");
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching appointments:", error);
-      toast.error("Không thể tải danh sách lịch hẹn");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [activeTab]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAppointments(controller.signal);
+    return () => controller.abort();
+  }, [fetchAppointments]);
 
   const handleConfirmAppointment = async (appointmentId) => {
     const appointment = appointments.find((a) => a._id === appointmentId);
@@ -85,12 +97,12 @@ const ProviderAppointments = () => {
 
     const confirmed = window.confirm(
       `Xác nhận lịch hẹn?\n\n` +
-        `Bệnh nhân: ${appointment.patient?.fullName}\n` +
+        `Bệnh nhân: ${appointment.patient?.fullName || "—"}\n` +
         `Ngày: ${new Date(appointment.scheduledDate).toLocaleDateString(
           "vi-VN"
         )}\n` +
-        `Giờ: ${appointment.scheduledTime}\n` +
-        `Phí: ${appointment.fee?.toLocaleString()}đ\n\n` +
+        `Giờ: ${appointment.scheduledTime || "—"}\n` +
+        `Phí: ${formatCurrency(appointment.fee)}\n\n` +
         `Bệnh nhân đã thanh toán. Bạn có chắc chắn xác nhận?`
     );
 
@@ -103,9 +115,11 @@ const ProviderAppointments = () => {
         "confirmed"
       );
 
-      if (response.data.success) {
+      if (response?.data?.success) {
         toast.success("Đã chấp nhận lịch hẹn");
         fetchAppointments();
+      } else {
+        toast.error(response?.data?.message || "Không thể xác nhận lịch hẹn");
       }
     } catch (error) {
       console.error("Error confirming appointment:", error);
@@ -129,19 +143,25 @@ const ProviderAppointments = () => {
       return;
     }
 
+    if (!appointmentToReject?._id) return;
+
     try {
       setActionLoading(true);
+      // pass reason as payload if API supports it
       const response = await appointmentService.updateAppointmentStatus(
         appointmentToReject._id,
-        "rejected"
+        "rejected",
+        { reason: rejectionReason }
       );
 
-      if (response.data.success) {
+      if (response?.data?.success) {
         toast.success("Đã từ chối lịch hẹn. Đã hoàn tiền cho bệnh nhân.");
         setOpenRejectDialog(false);
         setAppointmentToReject(null);
         setRejectionReason("");
         fetchAppointments();
+      } else {
+        toast.error(response?.data?.message || "Không thể từ chối lịch hẹn");
       }
     } catch (error) {
       console.error("Error rejecting appointment:", error);
@@ -234,7 +254,7 @@ const ProviderAppointments = () => {
                 </TableHead>
                 <TableBody>
                   {appointments.map((appointment) => (
-                    <TableRow key={appointment._id}>
+                    <TableRow key={appointment._id || appointment.id}>
                       <TableCell>
                         <Box
                           sx={{ display: "flex", alignItems: "center", gap: 1 }}
@@ -243,27 +263,29 @@ const ProviderAppointments = () => {
                             src={appointment.patient?.avatar}
                             sx={{ width: 40, height: 40 }}
                           >
-                            {appointment.patient?.fullName?.charAt(0)}
+                            {appointment.patient?.fullName?.charAt(0) || "U"}
                           </Avatar>
                           <Box>
                             <Typography variant="body2" fontWeight={600}>
-                              {appointment.patient?.fullName}
+                              {appointment.patient?.fullName || "—"}
                             </Typography>
                             <Typography
                               variant="caption"
                               color="text.secondary"
                             >
-                              {appointment.patient?.phone}
+                              {appointment.patient?.phone || "—"}
                             </Typography>
                           </Box>
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {new Date(appointment.scheduledDate).toLocaleDateString(
-                          "vi-VN"
-                        )}
+                        {appointment.scheduledDate
+                          ? new Date(
+                              appointment.scheduledDate
+                            ).toLocaleDateString("vi-VN")
+                          : "-"}
                       </TableCell>
-                      <TableCell>{appointment.scheduledTime}</TableCell>
+                      <TableCell>{appointment.scheduledTime || "-"}</TableCell>
                       <TableCell>
                         <Chip
                           icon={
@@ -284,7 +306,7 @@ const ProviderAppointments = () => {
                           noWrap
                           sx={{ maxWidth: 200 }}
                         >
-                          {appointment.reasonForVisit}
+                          {appointment.reasonForVisit || "—"}
                         </Typography>
                       </TableCell>
                       <TableCell>
@@ -293,7 +315,7 @@ const ProviderAppointments = () => {
                           fontWeight={600}
                           color="primary"
                         >
-                          {appointment.fee?.toLocaleString()}đ
+                          {formatCurrency(appointment.fee)}
                         </Typography>
                         {appointment.isPaid && (
                           <Chip
@@ -346,18 +368,19 @@ const ProviderAppointments = () => {
                               </IconButton>
                             </>
                           )}
-                          {appointment.status === "confirmed" && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              startIcon={<VideoCall />}
-                              onClick={() =>
-                                window.open(appointment.meetingLink, "_blank")
-                              }
-                            >
-                              Bắt đầu
-                            </Button>
-                          )}
+                          {appointment.status === "confirmed" &&
+                            appointment.meetingLink && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                startIcon={<VideoCall />}
+                                onClick={() =>
+                                  window.open(appointment.meetingLink, "_blank")
+                                }
+                              >
+                                Bắt đầu
+                              </Button>
+                            )}
                         </Box>
                       </TableCell>
                     </TableRow>
@@ -385,13 +408,13 @@ const ProviderAppointments = () => {
                   Bệnh nhân
                 </Typography>
                 <Typography variant="body1" fontWeight={600}>
-                  {selectedAppointment.patient?.fullName}
+                  {selectedAppointment.patient?.fullName || "—"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {selectedAppointment.patient?.email}
+                  {selectedAppointment.patient?.email || "—"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {selectedAppointment.patient?.phone}
+                  {selectedAppointment.patient?.phone || "—"}
                 </Typography>
               </Box>
 
@@ -400,15 +423,17 @@ const ProviderAppointments = () => {
                   Thời gian
                 </Typography>
                 <Typography variant="body1">
-                  {new Date(
-                    selectedAppointment.scheduledDate
-                  ).toLocaleDateString("vi-VN", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}{" "}
-                  - {selectedAppointment.scheduledTime}
+                  {selectedAppointment.scheduledDate
+                    ? new Date(
+                        selectedAppointment.scheduledDate
+                      ).toLocaleDateString("vi-VN", {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })
+                    : "—"}{" "}
+                  - {selectedAppointment.scheduledTime || "—"}
                 </Typography>
               </Box>
 
@@ -437,7 +462,7 @@ const ProviderAppointments = () => {
                   Lý do khám
                 </Typography>
                 <Typography variant="body1">
-                  {selectedAppointment.reasonForVisit}
+                  {selectedAppointment.reasonForVisit || "—"}
                 </Typography>
               </Box>
 
@@ -459,7 +484,7 @@ const ProviderAppointments = () => {
                   Phí tư vấn
                 </Typography>
                 <Typography variant="h6" color="primary">
-                  {selectedAppointment.fee?.toLocaleString()}đ
+                  {formatCurrency(selectedAppointment.fee)}
                 </Typography>
               </Box>
 
@@ -514,7 +539,10 @@ const ProviderAppointments = () => {
         </DialogTitle>
         <DialogContent>
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Khi từ chối, số tiền {appointmentToReject?.fee?.toLocaleString()}đ
+            Khi từ chối, số tiền{" "}
+            {appointmentToReject
+              ? formatCurrency(appointmentToReject.fee)
+              : "-"}{" "}
             sẽ được hoàn lại cho bệnh nhân
           </Alert>
 
@@ -524,16 +552,18 @@ const ProviderAppointments = () => {
                 Thông tin lịch hẹn:
               </Typography>
               <Typography variant="body2">
-                Bệnh nhân: {appointmentToReject.patient?.fullName}
+                Bệnh nhân: {appointmentToReject.patient?.fullName || "—"}
               </Typography>
               <Typography variant="body2">
                 Ngày:{" "}
-                {new Date(appointmentToReject.scheduledDate).toLocaleDateString(
-                  "vi-VN"
-                )}
+                {appointmentToReject.scheduledDate
+                  ? new Date(
+                      appointmentToReject.scheduledDate
+                    ).toLocaleDateString("vi-VN")
+                  : "—"}
               </Typography>
               <Typography variant="body2">
-                Giờ: {appointmentToReject.scheduledTime}
+                Giờ: {appointmentToReject.scheduledTime || "—"}
               </Typography>
             </Box>
           )}

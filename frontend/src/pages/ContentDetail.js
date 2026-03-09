@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Container,
@@ -36,12 +36,7 @@ const ContentDetail = () => {
   const [liked, setLiked] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [completed, setCompleted] = useState(false);
-
-  useEffect(() => {
-    fetchContent();
-  }, [id]);
-
-  const fetchContent = async () => {
+  const fetchContent = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -58,7 +53,11 @@ const ContentDetail = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchContent();
+  }, [fetchContent]);
 
   const handleLike = async () => {
     try {

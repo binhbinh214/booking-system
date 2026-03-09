@@ -29,7 +29,6 @@ import {
 } from "@mui/material";
 import {
   ArrowBack,
-  CalendarMonth,
   VideoCall,
   Warning,
   Chat,
