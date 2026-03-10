@@ -47,11 +47,14 @@ const limiter = rateLimit({
 app.use("/api/", limiter);
 
 // Allowed origins from env (comma separated) or defaults for local dev
-const allowedOrigins =
-  "http://localhost:3000,http://localhost:4000,https://booking-system-phi-eight.vercel.app,https://booking-system-erop.onrender.com,https://booking-system-7v5zyxlw4-trn-lng-binhs-projects.vercel.app"
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+const allowedOrigins = (
+  process.env.FRONTEND_URLS ||
+  process.env.FRONTEND_URL ||
+  "http://localhost:3000,http://localhost:4000"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 console.log("🌐 Allowed Origins:", allowedOrigins);
 
@@ -101,6 +104,8 @@ const corsConfig = {
     "Accept",
     "Origin",
     "ngrok-skip-browser-warning",
+    "Idempotency-Key",
+    "idempotency-key",
   ],
   exposedHeaders: ["X-Total-Count", "X-Page-Count"],
 };
@@ -228,6 +233,8 @@ const io = new Server(server, {
       "Content-Type",
       "Authorization",
       "ngrok-skip-browser-warning",
+      "Idempotency-Key",
+      "idempotency-key",
     ],
   },
   transports: ["polling", "websocket"],
