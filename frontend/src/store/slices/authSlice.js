@@ -3,7 +3,7 @@ import authService from "../../services/auth.service";
 
 const initialState = {
   user: null,
-  token: null,
+  token: typeof window !== "undefined" ? localStorage.getItem("token") : null,
   isAuthenticated: false,
   isLoading: false,
   error: null,
