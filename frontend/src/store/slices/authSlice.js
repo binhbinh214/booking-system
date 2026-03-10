@@ -1,3 +1,4 @@
+// ...existing code...
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import authService from "../../services/auth.service";
 
@@ -44,6 +45,26 @@ export const login = createAsyncThunk(
       }
       return rejectWithValue(
         data?.message || err.message || "Đăng nhập thất bại"
+      );
+    }
+  }
+);
+
+// ← NEW: getMe thunk used by App.js
+export const getMe = createAsyncThunk(
+  "auth/getMe",
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        return rejectWithValue("No token available");
+      }
+      // authService.getMe should use the stored token to fetch current user
+      const response = await authService.getMe(token);
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || err.message || "Failed to fetch user"
       );
     }
   }
@@ -139,6 +160,36 @@ const authSlice = createSlice({
           state.verificationEmail = action.payload.email;
           state.error = action.payload.message;
         } else state.error = action.payload;
+      })
+
+      // ← NEW: getMe handlers
+      .addCase(getMe.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(getMe.fulfilled, (state, action) => {
+        state.isLoading = false;
+        const payload = action.payload?.data || action.payload || {};
+        if (payload.user) {
+          state.user = payload.user;
+        }
+        if (payload.token) {
+          state.token = payload.token;
+          localStorage.setItem("token", payload.token);
+          state.isAuthenticated = true;
+        } else if (state.token) {
+          // if token already present in state/localStorage, mark authenticated
+          state.isAuthenticated = true;
+        }
+      })
+      .addCase(getMe.rejected, (state, action) => {
+        state.isLoading = false;
+        // clear invalid token on failure
+        state.user = null;
+        state.token = null;
+        state.isAuthenticated = false;
+        localStorage.removeItem("token");
+        state.error = action.payload || action.error?.message;
       })
 
       .addCase(verifyOTP.pending, (state) => {
