@@ -1,105 +1,139 @@
-const { Resend } = require("resend");
-
-let resendClient = null;
-
-try {
-  if (process.env.RESEND_API_KEY) {
-    resendClient = new Resend(process.env.RESEND_API_KEY);
-    console.log("Email provider: Resend API enabled");
-  } else {
-    console.warn(
-      "Email provider: RESEND_API_KEY not set — email sending disabled"
-    );
-  }
-} catch (e) {
-  console.warn("Resend init error:", e && e.message ? e.message : e);
-  resendClient = null;
-}
+const nodemailer = require("nodemailer");
 
 const FROM = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
-async function sendViaResend({ to, subject, html, text }) {
-  if (!resendClient) {
-    return {
-      success: false,
-      error: "Resend client not configured (RESEND_API_KEY missing)",
-    };
+let transporter = null;
+
+function initTransporter() {
+  if (
+    !process.env.SMTP_HOST ||
+    !process.env.SMTP_USER ||
+    !process.env.SMTP_PASS
+  ) {
+    console.warn(
+      "SMTP not configured (SMTP_HOST/SMTP_USER/SMTP_PASS). Email sending disabled."
+    );
+    return null;
+  }
+
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === "true" || port === 465;
+
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    // optional TLS options for some SMTP providers
+    tls:
+      process.env.SMTP_REJECT_UNAUTHORIZED === "false"
+        ? { rejectUnauthorized: false }
+        : undefined,
+  });
+
+  transporter
+    .verify()
+    .then(() => console.log("✅ SMTP transporter verified"))
+    .catch((err) =>
+      console.warn(
+        "⚠️ SMTP verify failed:",
+        err && err.message ? err.message : err
+      )
+    );
+
+  return transporter;
+}
+
+initTransporter();
+
+async function sendEmailRaw({ to, subject, html, text }) {
+  if (!transporter) {
+    initTransporter();
+    if (!transporter) {
+      return { success: false, error: "SMTP transporter not configured" };
+    }
   }
 
   try {
-    const res = await resendClient.emails.send({
+    const info = await transporter.sendMail({
       from: FROM,
       to,
       subject,
-      html,
       text,
-      reply_to: FROM,
+      html,
     });
-    return { success: true, messageId: res?.id || null, raw: res };
+
+    // nodemailer returns info object; normalize to success object
+    return {
+      success: true,
+      messageId: info.messageId || info.response || null,
+      raw: info,
+    };
   } catch (err) {
     return {
       success: false,
-      error: err && (err.message || JSON.stringify(err)),
+      error:
+        (err && (err.message || JSON.stringify(err))) || "Unknown send error",
     };
   }
 }
 
-// Public API
-const sendEmail = async ({ email, subject, html, text }) => {
-  const to = email;
-  const r = await sendViaResend({ to, subject, html, text });
-  if (r.success) return r;
-  // If Resend failed, return the error (no SMTP fallback)
-  console.warn("Resend send failed:", r.error);
-  return { success: false, error: r.error || "Resend failed" };
-};
-
-const sendOTPEmail = async (email, otp, purpose = "verification") => {
+async function sendOTPEmail(email, otp, purpose = "verification") {
   const subjects = {
     verification: "Xác thực tài khoản - Mental Healthcare",
     reset: "Đặt lại mật khẩu - Mental Healthcare",
   };
+  const subject = subjects[purpose] || subjects.verification;
+
   const html = `
-    <div style="font-family:Arial, sans-serif; max-width:600px;margin:0 auto;padding:20px;">
-      <div style="background:#667eea;color:#fff;padding:20px;border-radius:8px 8px 0 0;text-align:center;">
-        <h2>Mental Healthcare</h2>
+    <div style="font-family: Arial, sans-serif; max-width:600px; margin:0 auto; padding:20px; color:#333;">
+      <div style="background:#667eea; color:#fff; padding:18px; border-radius:8px 8px 0 0; text-align:center;">
+        <h2 style="margin:0">Mental Healthcare</h2>
       </div>
-      <div style="background:#fff;padding:20px;border:1px solid #eee;border-top:0;border-radius:0 0 8px 8px;">
-        <p>Mã OTP của bạn:</p>
-        <div style="font-size:28px;font-weight:700;letter-spacing:6px;margin:10px 0;text-align:center;">${otp}</div>
-        <p style="color:#666;font-size:13px;">Mã hết hạn sau 10 phút.</p>
+      <div style="background:#fff; padding:20px; border:1px solid #eee; border-top:0; border-radius:0 0 8px 8px;">
+        <p>Xin chào,</p>
+        <p>Mã <strong>OTP</strong> của bạn là:</p>
+        <div style="font-size:28px; font-weight:700; letter-spacing:6px; text-align:center; margin:12px 0;">
+          ${otp}
+        </div>
+        <p style="color:#666; font-size:13px;">Mã có hiệu lực trong 10 phút. Nếu bạn không yêu cầu mã này, hãy bỏ qua email này.</p>
+        <hr />
+        <p style="font-size:12px; color:#999;">Nếu email này không phải của bạn, vui lòng liên hệ bộ phận hỗ trợ.</p>
       </div>
     </div>
   `;
-  return await sendEmail({
-    email,
-    subject: subjects[purpose] || subjects.verification,
-    html,
-    text: `Mã OTP của bạn: ${otp} (hết hạn sau 10 phút)`,
-  });
-};
 
-const sendWelcomeEmail = async (email, fullName) => {
-  const html = `<p>Xin chào ${fullName},<br/>Cảm ơn bạn đã đăng ký tại Mental Healthcare.</p>`;
-  return await sendEmail({
-    email,
-    subject: "Chào mừng - Mental Healthcare",
-    html,
-    text: `Xin chào ${fullName}`,
-  });
-};
+  const text = `Mã OTP của bạn: ${otp} (hết hạn sau 10 phút)`;
 
-const sendTestEmail = async (to) => {
-  return await sendEmail({
-    email: to || process.env.DEV_TEST_EMAIL || process.env.EMAIL_FROM || FROM,
+  return await sendEmailRaw({ to: email, subject, html, text });
+}
+
+async function sendWelcomeEmail(email, fullName) {
+  const subject = "Chào mừng đến Mental Healthcare";
+  const html = `<p>Xin chào ${
+    fullName || ""
+  },</p><p>Cảm ơn bạn đã đăng ký tại Mental Healthcare.</p>`;
+  const text = `Xin chào ${
+    fullName || ""
+  }, Cảm ơn bạn đã đăng ký tại Mental Healthcare.`;
+
+  return await sendEmailRaw({ to: email, subject, html, text });
+}
+
+async function sendTestEmail(to) {
+  return await sendEmailRaw({
+    to: to || process.env.DEV_TEST_EMAIL || FROM,
     subject: "Test Email - Mental Healthcare",
-    html: "<p>Test</p>",
-    text: "Test",
+    html: "<p>Test email</p>",
+    text: "Test email",
   });
-};
+}
 
 module.exports = {
-  sendEmail,
+  sendEmailRaw,
   sendOTPEmail,
   sendWelcomeEmail,
   sendTestEmail,
