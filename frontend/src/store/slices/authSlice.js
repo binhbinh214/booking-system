@@ -17,8 +17,10 @@ export const register = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       const response = await authService.register(userData);
+      console.log("✅ Register response:", response.data);
       return response.data;
     } catch (error) {
+      console.error("❌ Register error:", error.response?.data);
       return rejectWithValue(
         error.response?.data?.message || "Đăng ký thất bại"
       );
@@ -150,14 +152,21 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        // Backend response structure: { success: true, token: "...", data: { user: {...} } }
-        const { token, data } = action.payload;
+        // ACTUAL backend response from sendTokenResponse:
+        // action.payload = { data: { user: {...}, token: "...", message: "...", success: true } }
+        // Everything is nested inside 'data'!
 
-        if (token && data?.user) {
-          state.user = data.user;
+        const responseData = action.payload.data || action.payload;
+        const { token, user } = responseData;
+
+        console.log("📦 Processing login - token:", !!token, "user:", !!user);
+
+        if (token && user) {
+          state.user = user;
           state.token = token;
           state.isAuthenticated = true;
           localStorage.setItem("token", token);
+          console.log("✅ Login successful");
         } else {
           console.error("❌ Invalid login response structure:", action.payload);
           state.error = "Lỗi đăng nhập. Vui lòng thử lại.";
@@ -181,16 +190,20 @@ const authSlice = createSlice({
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        // Backend response structure: { success: true, token: "...", data: { user: {...} } }
-        const { token, data } = action.payload;
+        // Same structure as login
+        const responseData = action.payload.data || action.payload;
+        const { token, user } = responseData;
 
-        if (token && data?.user) {
-          state.user = data.user;
+        console.log("📦 Processing OTP - token:", !!token, "user:", !!user);
+
+        if (token && user) {
+          state.user = user;
           state.token = token;
           state.isAuthenticated = true;
           state.requireVerification = false;
           state.verificationEmail = null;
           localStorage.setItem("token", token);
+          console.log("✅ OTP verification successful");
         } else {
           console.error(
             "❌ Invalid verify OTP response structure:",
