@@ -278,7 +278,37 @@ const createAppointment = async (req, res) => {
     });
   }
 };
+const getMyAppointments = async (req, res, next) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 20);
+    const skip = (page - 1) * limit;
 
+    const query = { patient: req.user.id };
+
+    // optional filters
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.providerId) query.provider = req.query.providerId;
+
+    const total = await Appointment.countDocuments(query);
+    const appointments = await Appointment.find(query)
+      .populate("provider", "fullName email avatar specialization role")
+      .populate("patient", "fullName email avatar")
+      .populate("paymentId")
+      .sort({ scheduledDate: -1, scheduledTime: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.json({
+      success: true,
+      data: appointments,
+      pagination: { total, page, pages: Math.max(1, Math.ceil(total / limit)) },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 // Get appointment by ID
 const getAppointmentById = async (req, res) => {
   try {
