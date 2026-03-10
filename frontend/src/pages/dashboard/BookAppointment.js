@@ -38,7 +38,7 @@ import toast from "react-hot-toast";
 import { getProviderById } from "../../store/slices/userSlice";
 import { getMe } from "../../store/slices/authSlice";
 import appointmentService from "../../services/appointment.service";
-import api from "../../services/api"; // add this near other imports
+import api from "../../services/api"; // raw axios instance (used for retry)
 
 const timeSlots = [
   "08:00",
@@ -124,51 +124,48 @@ const BookAppointment = () => {
   const handleConfirmBooking = async () => {
     setOpenConfirmDialog(false);
 
-    // create an idempotency key to avoid duplicate processing on server
+    // idempotency key / clientRef
     const idempotencyKey =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+    const appointmentData = {
+      providerId,
+      providerType: currentProvider.role,
+      sessionType: formData.sessionType,
+      scheduledDate: formData.scheduledDate,
+      scheduledTime: formData.scheduledTime,
+      reasonForVisit: formData.reasonForVisit,
+      patientNotes: formData.patientNotes,
+      clientRef: idempotencyKey,
+    };
+
     try {
       setLoading(true);
-
-      const appointmentData = {
-        providerId,
-        providerType: currentProvider.role,
-        sessionType: formData.sessionType,
-        scheduledDate: formData.scheduledDate,
-        scheduledTime: formData.scheduledTime,
-        reasonForVisit: formData.reasonForVisit,
-        patientNotes: formData.patientNotes,
-        clientRef: idempotencyKey, // include client reference
-
-        // appointmentType removed - server will force "online"
-      };
-      console.log("=== BOOKING APPOINTMENT ===");
-      console.log("Appointment data:", appointmentData);
+      setError("");
+      console.log("=== BOOKING APPOINTMENT ===", appointmentData);
 
       let response;
       try {
-        // try existing service first
         response = await appointmentService.createAppointment(appointmentData);
       } catch (err) {
-        // If timeout or network error, retry once with explicit idempotency header using api instance
         const isTimeout =
           err?.code === "ECONNABORTED" ||
           (err?.message || "").toLowerCase().includes("timeout");
+
         if (isTimeout) {
           console.warn(
             "Request timed out, retrying once with idempotency key...",
             idempotencyKey
           );
           try {
+            // retry using raw axios instance with Idempotency-Key header
             response = await api.post("/appointments", appointmentData, {
               headers: { "Idempotency-Key": idempotencyKey },
               timeout: 120000,
             });
           } catch (retryErr) {
-            // final failure - but booking might have been processed by server
             console.error("Retry after timeout failed:", retryErr);
             throw retryErr;
           }
@@ -176,14 +173,52 @@ const BookAppointment = () => {
           throw err;
         }
       }
+
       console.log("Booking response:", response?.data);
 
       if (response?.data?.success) {
-        // Refresh user balance
-        await dispatch(getMe()).unwrap();
+        // Refresh user balance & navigate
+        try {
+          await dispatch(getMe()).unwrap();
+        } catch (e) {
+          // ignore
+        }
         toast.success(response.data.message || "Đặt lịch thành công!");
-        setTimeout(() => navigate("/appointments"), 1500);
-      } else {
+        setTimeout(() => navigate("/appointments"), 1200);
+        return;
+      }
+
+      // If not success (but no exception), try to check if appointment exists (defensive)
+      if (!response?.data?.success) {
+        // try to detect created appointment by clientRef or matching fields
+        try {
+          const recent = await appointmentService.getMyAppointments({
+            limit: 10,
+          });
+          const list = recent?.data?.data || recent?.data || [];
+          const found = list.find((a) => {
+            if (a.clientRef && a.clientRef === idempotencyKey) return true;
+            return (
+              a.provider?.toString() === providerId?.toString() &&
+              a.scheduledDate === appointmentData.scheduledDate &&
+              a.scheduledTime === appointmentData.scheduledTime
+            );
+          });
+          if (found) {
+            await dispatch(getMe())
+              .unwrap()
+              .catch(() => {});
+            toast.success("Đặt lịch thành công (xác nhận sau lỗi).");
+            setTimeout(() => navigate("/appointments"), 1200);
+            return;
+          }
+        } catch (checkErr) {
+          console.warn(
+            "Error checking appointments after non-success:",
+            checkErr
+          );
+        }
+
         const msg =
           response?.data?.message || "Không thể đặt lịch. Vui lòng thử lại.";
         setError(msg);
@@ -191,30 +226,56 @@ const BookAppointment = () => {
       }
     } catch (err) {
       console.error("Create appointment error:", err);
-      // If timeout happened and we couldn't confirm, refresh user and instruct user to check appointments
-      if (
+
+      // Timeout/network case: check server if appointment exists (idempotency)
+      const isTimeout =
         err?.code === "ECONNABORTED" ||
-        (err?.message || "").toLowerCase().includes("timeout")
-      ) {
-        // try to refresh user balance/state anyway
+        (err?.message || "").toLowerCase().includes("timeout");
+
+      if (isTimeout) {
+        // refresh user state anyway
         try {
           await dispatch(getMe()).unwrap();
         } catch (e) {
           /* ignore */
         }
+
+        // check recent appointments for clientRef or matching slot
+        try {
+          const recent = await appointmentService.getMyAppointments({
+            limit: 15,
+          });
+          const list = recent?.data?.data || recent?.data || [];
+          const found = list.find((a) => {
+            if (a.clientRef && a.clientRef === idempotencyKey) return true;
+            return (
+              a.provider?.toString() === providerId?.toString() &&
+              a.scheduledDate === appointmentData.scheduledDate &&
+              a.scheduledTime === appointmentData.scheduledTime
+            );
+          });
+          if (found) {
+            toast.success("Đặt lịch thành công (xác nhận sau lỗi mạng).");
+            setTimeout(() => navigate("/appointments"), 1200);
+            return;
+          }
+        } catch (checkErr) {
+          console.warn("Error checking appointments after timeout:", checkErr);
+        }
+
         const msg =
           "Yêu cầu quá thời gian chờ. Có thể đặt lịch đã thành công. Vui lòng kiểm tra trang Lịch hẹn.";
         setError(msg);
         toast(msg, { icon: "⚠️" });
-        // navigate user to appointments to verify
         setTimeout(() => navigate("/appointments"), 1500);
-      } else {
-        const errorMsg =
-          err.response?.data?.message ||
-          "Không thể đặt lịch. Vui lòng thử lại.";
-        setError(errorMsg);
-        toast.error(errorMsg);
+        return;
       }
+
+      // other errors
+      const errorMsg =
+        err.response?.data?.message || "Không thể đặt lịch. Vui lòng thử lại.";
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -333,7 +394,6 @@ const BookAppointment = () => {
                 </Typography>
               </Box>
 
-              {/* Online Appointment Notice */}
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   <VideoCall fontSize="small" />
@@ -394,7 +454,6 @@ const BookAppointment = () => {
 
               <Divider sx={{ my: 2 }} />
 
-              {/* Chat Button */}
               <Button
                 fullWidth
                 variant="outlined"
@@ -406,7 +465,6 @@ const BookAppointment = () => {
                 {currentProvider.role === "doctor" ? "bác sĩ" : "chuyên gia"}
               </Button>
 
-              {/* Provider Info */}
               {currentProvider.bio && (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="subtitle2" fontWeight={600} gutterBottom>
@@ -446,7 +504,6 @@ const BookAppointment = () => {
 
               <form onSubmit={handleSubmit}>
                 <Grid container spacing={3}>
-                  {/* Date and Time */}
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
@@ -479,7 +536,6 @@ const BookAppointment = () => {
                     </FormControl>
                   </Grid>
 
-                  {/* Session Type and Appointment Type (Fixed as Online) */}
                   <Grid item xs={12} sm={6}>
                     <FormControl fullWidth>
                       <InputLabel>Loại buổi hẹn</InputLabel>
@@ -532,7 +588,6 @@ const BookAppointment = () => {
                     </FormControl>
                   </Grid>
 
-                  {/* Hình thức: hiển thị cố định Trực tuyến */}
                   <Grid item xs={12} sm={6}>
                     <Box
                       sx={{
@@ -557,7 +612,6 @@ const BookAppointment = () => {
                     </Box>
                   </Grid>
 
-                  {/* Reason for Visit */}
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
@@ -567,14 +621,13 @@ const BookAppointment = () => {
                       label="Lý do khám / Vấn đề gặp phải"
                       value={formData.reasonForVisit}
                       onChange={handleChange}
-                      placeholder="Mô tả ngắn gọn vấn đề bạn đang gặp phải... Ví dụ: Lo âu, stress, trầm cảm, rối loạn giấc ngủ, vấn đề gia đình..."
+                      placeholder="Mô tả ngắn gọn vấn đề bạn đang gặp phải..."
                       required
                       helperText={`${formData.reasonForVisit.length}/500 ký tự`}
                       inputProps={{ maxLength: 500 }}
                     />
                   </Grid>
 
-                  {/* Patient Notes */}
                   <Grid item xs={12}>
                     <TextField
                       fullWidth
@@ -584,13 +637,12 @@ const BookAppointment = () => {
                       label="Ghi chú thêm (tùy chọn)"
                       value={formData.patientNotes}
                       onChange={handleChange}
-                      placeholder="Thông tin bổ sung cho bác sĩ... Ví dụ: Tiền sử bệnh, thuốc đang dùng, yêu cầu đặc biệt..."
+                      placeholder="Thông tin bổ sung cho bác sĩ..."
                       helperText={`${formData.patientNotes.length}/500 ký tự`}
                       inputProps={{ maxLength: 500 }}
                     />
                   </Grid>
 
-                  {/* Important Notes */}
                   <Grid item xs={12}>
                     <Alert severity="info" icon={<Warning />}>
                       <Typography variant="body2" fontWeight={600} gutterBottom>
@@ -616,7 +668,6 @@ const BookAppointment = () => {
                     </Alert>
                   </Grid>
 
-                  {/* Submit Button */}
                   <Grid item xs={12}>
                     <Button
                       type="submit"
@@ -647,7 +698,6 @@ const BookAppointment = () => {
         </Grid>
       </Grid>
 
-      {/* Confirmation Dialog */}
       <Dialog
         open={openConfirmDialog}
         onClose={() => setOpenConfirmDialog(false)}
