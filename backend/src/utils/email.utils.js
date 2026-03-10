@@ -1,6 +1,7 @@
 const nodemailer = require("nodemailer");
 
-const FROM = process.env.EMAIL_FROM || "onboarding@resend.dev";
+const FROM =
+  process.env.EMAIL_FROM || process.env.SMTP_USER || "onboarding@resend.dev";
 
 let transporter = null;
 
@@ -16,9 +17,10 @@ function initTransporter() {
     return null;
   }
 
-  const port = Number(process.env.SMTP_PORT || 587);
+  const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE === "true" || port === 465;
 
+  // add explicit timeouts and debug to help diagnose timeouts/connection issues
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
@@ -27,7 +29,11 @@ function initTransporter() {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-    // optional TLS options for some SMTP providers
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 60000), // 60s
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 60000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 60000),
+    logger: true,
+    debug: process.env.SMTP_DEBUG === "true",
     tls:
       process.env.SMTP_REJECT_UNAUTHORIZED === "false"
         ? { rejectUnauthorized: false }
@@ -66,17 +72,19 @@ async function sendEmailRaw({ to, subject, html, text }) {
       html,
     });
 
-    // nodemailer returns info object; normalize to success object
     return {
       success: true,
       messageId: info.messageId || info.response || null,
       raw: info,
     };
   } catch (err) {
+    // log full error for debugging
+    console.error("SMTP sendMail error:", err && (err.stack || err));
     return {
       success: false,
       error:
         (err && (err.message || JSON.stringify(err))) || "Unknown send error",
+      details: err, // caller can inspect
     };
   }
 }
@@ -99,9 +107,7 @@ async function sendOTPEmail(email, otp, purpose = "verification") {
         <div style="font-size:28px; font-weight:700; letter-spacing:6px; text-align:center; margin:12px 0;">
           ${otp}
         </div>
-        <p style="color:#666; font-size:13px;">Mã có hiệu lực trong 10 phút. Nếu bạn không yêu cầu mã này, hãy bỏ qua email này.</p>
-        <hr />
-        <p style="font-size:12px; color:#999;">Nếu email này không phải của bạn, vui lòng liên hệ bộ phận hỗ trợ.</p>
+        <p style="color:#666; font-size:13px;">Mã có hiệu lực trong 10 phút.</p>
       </div>
     </div>
   `;
