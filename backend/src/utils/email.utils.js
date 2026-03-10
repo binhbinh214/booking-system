@@ -1,5 +1,5 @@
-// ...existing code...
 const { Resend } = require("resend");
+
 let resendClient = null;
 
 try {
@@ -7,8 +7,8 @@ try {
     resendClient = new Resend(process.env.RESEND_API_KEY);
     console.log("Email provider: Resend API enabled");
   } else {
-    console.log(
-      "Email provider: Resend API key not found — will fallback to nodemailer if available"
+    console.warn(
+      "Email provider: RESEND_API_KEY not set — email sending disabled"
     );
   }
 } catch (e) {
@@ -16,69 +16,26 @@ try {
   resendClient = null;
 }
 
-// optional nodemailer fallback (keeps previous behavior)
-let nodemailerFallback = null;
-if (!resendClient) {
-  try {
-    const nodemailer = require("nodemailer");
-    const port = parseInt(process.env.EMAIL_PORT, 10) || 587;
-    nodemailerFallback = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || "smtp.gmail.com",
-      port,
-      secure: port === 465,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        rejectUnauthorized: process.env.EMAIL_REJECT_UNAUTHORIZED !== "false",
-      },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-    });
-    console.log("Nodemailer fallback ready");
-  } catch (err) {
-    console.warn(
-      "Nodemailer not available or failed to init:",
-      err && err.message ? err.message : err
-    );
-    nodemailerFallback = null;
-  }
-}
-
-const FROM =
-  process.env.EMAIL_FROM || process.env.EMAIL_USER || "no-reply@example.com";
+const FROM = process.env.EMAIL_FROM || "onboarding@resend.dev";
 
 async function sendViaResend({ to, subject, html, text }) {
+  if (!resendClient) {
+    return {
+      success: false,
+      error: "Resend client not configured (RESEND_API_KEY missing)",
+    };
+  }
+
   try {
     const res = await resendClient.emails.send({
       from: FROM,
       to,
       subject,
       html,
+      text,
       reply_to: FROM,
     });
-    // Resend returns { id, object, status, ... } — return id as messageId
-    return { success: true, messageId: res.id };
-  } catch (err) {
-    return {
-      success: false,
-      error: err && (err.message || JSON.stringify(err)),
-    };
-  }
-}
-
-async function sendViaNodemailer({ to, subject, html, text }) {
-  try {
-    if (!nodemailerFallback) throw new Error("nodemailer not configured");
-    const info = await nodemailerFallback.sendMail({
-      from: FROM,
-      to,
-      subject,
-      text: text || (html ? html.replace(/<[^>]+>/g, "") : ""),
-      html,
-    });
-    return { success: true, messageId: info.messageId || info.response };
+    return { success: true, messageId: res?.id || null, raw: res };
   } catch (err) {
     return {
       success: false,
@@ -90,16 +47,11 @@ async function sendViaNodemailer({ to, subject, html, text }) {
 // Public API
 const sendEmail = async ({ email, subject, html, text }) => {
   const to = email;
-  if (resendClient) {
-    const r = await sendViaResend({ to, subject, html, text });
-    if (r.success) return r;
-    console.warn("Resend failed, trying fallback:", r.error);
-  }
-  // fallback to nodemailer if available
-  if (nodemailerFallback) {
-    return await sendViaNodemailer({ to, subject, html, text });
-  }
-  return { success: false, error: "No email provider configured" };
+  const r = await sendViaResend({ to, subject, html, text });
+  if (r.success) return r;
+  // If Resend failed, return the error (no SMTP fallback)
+  console.warn("Resend send failed:", r.error);
+  return { success: false, error: r.error || "Resend failed" };
 };
 
 const sendOTPEmail = async (email, otp, purpose = "verification") => {
@@ -139,7 +91,7 @@ const sendWelcomeEmail = async (email, fullName) => {
 
 const sendTestEmail = async (to) => {
   return await sendEmail({
-    email: to || process.env.DEV_TEST_EMAIL || process.env.EMAIL_USER,
+    email: to || process.env.DEV_TEST_EMAIL || process.env.EMAIL_FROM || FROM,
     subject: "Test Email - Mental Healthcare",
     html: "<p>Test</p>",
     text: "Test",
@@ -152,4 +104,3 @@ module.exports = {
   sendWelcomeEmail,
   sendTestEmail,
 };
-// ...existing code...
