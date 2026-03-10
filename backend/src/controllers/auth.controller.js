@@ -7,17 +7,19 @@ const {
   getOTPExpiry,
 } = require("../utils/otp.utils");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 
-// @desc    Register user
-// @route   POST /api/auth/register
-// @access  Public
-// ...existing code...
-// ...existing code...
+/**
+ * Register user
+ * - creates user (handles duplicate key)
+ * - generates and stores OTP
+ * - responds immediately
+ * - sends OTP email in background with timeout
+ */
 exports.register = async (req, res) => {
   try {
     const { email, password, fullName, phone, role } = req.body;
 
-    // Validate required fields
     if (!email || !password || !fullName) {
       return res.status(400).json({
         success: false,
@@ -25,7 +27,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if user exists (fast fail)
+    // fast check
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -34,7 +36,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Create user (handle duplicate-key race)
+    // create user with duplicate-key handling
     let user;
     try {
       user = await User.create({
@@ -47,7 +49,6 @@ exports.register = async (req, res) => {
         isVerified: false,
       });
     } catch (createErr) {
-      // Race condition: another request created same email
       if (createErr && createErr.code === 11000) {
         return res.status(400).json({
           success: false,
@@ -57,13 +58,13 @@ exports.register = async (req, res) => {
       throw createErr;
     }
 
-    // Generate OTP for email verification and persist to user
+    // generate and persist OTP
     const otp = generateOTP();
     user.otp = otp;
     user.otpExpires = getOTPExpiry();
     await user.save();
 
-    // Prepare response immediately (do not wait for email send)
+    // immediate response
     const responseData = {
       success: true,
       message:
@@ -71,26 +72,21 @@ exports.register = async (req, res) => {
       data: {
         userId: user._id,
         email: user.email,
-        emailSent: false, // will be attempted in background
+        emailSent: false,
       },
     };
-
     if (process.env.NODE_ENV === "development") {
       responseData.data.devOtp = otp;
     }
-
-    // Log and send response
     console.log("✅ Register: sending immediate response for", email);
     res.status(201).json(responseData);
 
-    // Ensure we stop here for response path
-    // SEND OTP EMAIL IN BACKGROUND (non-blocking) with a short timeout
+    // send OTP in background with timeout
     setImmediate(async () => {
       try {
         console.log(`\n${"=".repeat(50)}`);
         console.log(`📧 Sending registration OTP to: ${email}`);
 
-        // wrap sendOTPEmail with timeout to avoid long blocking operations
         const sendWithTimeout = (ms) =>
           Promise.race([
             sendOTPEmail(email, otp, "verification"),
@@ -101,7 +97,7 @@ exports.register = async (req, res) => {
 
         let emailResult = { success: false };
         try {
-          emailResult = await sendWithTimeout(15000); // 15s timeout for sending
+          emailResult = await sendWithTimeout(15000);
         } catch (err) {
           console.error(
             "📛 sendOTPEmail failed or timed out:",
@@ -131,7 +127,6 @@ exports.register = async (req, res) => {
     return;
   } catch (error) {
     console.error("Register error:", error);
-    // If headers already sent, nothing to do
     if (res.headersSent) return;
     res.status(500).json({
       success: false,
@@ -140,12 +135,216 @@ exports.register = async (req, res) => {
     });
   }
 };
-// ...existing code...
-// ...existing code...
 
-// @desc    Reset password with OTP
-// @route   POST /api/auth/reset-password
-// @access  Public
+/**
+ * Login user
+ * - requires email & password
+ * - optionally require isVerified
+ * - sends tokens via sendTokenResponse
+ */
+exports.login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Chưa cung cấp email hoặc mật khẩu" });
+    }
+
+    const user = await User.findOne({ email }).select(
+      "+password +isVerified +status"
+    );
+    if (!user) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Email hoặc mật khẩu không đúng" });
+    }
+
+    if (user.status === "suspended") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Tài khoản đã bị tạm khóa" });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Email hoặc mật khẩu không đúng" });
+    }
+
+    if (!user.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Tài khoản chưa được xác thực. Vui lòng kiểm tra email để nhận OTP.",
+      });
+    }
+
+    return sendTokenResponse(user, 200, res, "Đăng nhập thành công");
+  } catch (err) {
+    console.error("Login error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi đăng nhập" });
+  }
+};
+
+/**
+ * Verify OTP
+ */
+exports.verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Thiếu email hoặc OTP" });
+    }
+
+    const user = await User.findOne({ email }).select(
+      "+otp +otpExpires +isVerified"
+    );
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Yêu cầu không hợp lệ" });
+    }
+
+    if (user.isVerified) {
+      return res
+        .status(200)
+        .json({ success: true, message: "Tài khoản đã được xác thực" });
+    }
+
+    if (user.otp !== otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Mã OTP không đúng" });
+    }
+
+    if (isOTPExpired(user.otpExpires)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Mã OTP đã hết hạn" });
+    }
+
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    // send welcome email in background
+    setImmediate(async () => {
+      try {
+        await sendWelcomeEmail(user.email, user.fullName);
+      } catch (err) {
+        console.error("Welcome email error:", err);
+      }
+    });
+
+    res.status(200).json({ success: true, message: "Xác thực thành công" });
+  } catch (err) {
+    console.error("verifyOTP error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi xác thực OTP" });
+  }
+};
+
+/**
+ * Resend OTP
+ */
+exports.resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email là bắt buộc" });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "Người dùng không tồn tại" });
+
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = getOTPExpiry();
+    await user.save();
+
+    setImmediate(async () => {
+      try {
+        await sendOTPEmail(email, otp, "verification");
+      } catch (err) {
+        console.error("resendOTP email error:", err);
+      }
+    });
+
+    const resp = {
+      success: true,
+      message: "OTP đã được gửi (nếu email hợp lệ)",
+    };
+    if (process.env.NODE_ENV === "development") resp.devOtp = otp;
+    res.status(200).json(resp);
+  } catch (err) {
+    console.error("resendOTP error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi gửi lại OTP" });
+  }
+};
+
+/**
+ * Forgot password - send reset OTP
+ */
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email là bắt buộc" });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(200).json({
+        success: true,
+        message:
+          "Nếu email tồn tại, chúng tôi sẽ gửi hướng dẫn đặt lại mật khẩu",
+      });
+
+    const otp = generateOTP();
+    user.resetPasswordToken = otp;
+    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000;
+    await user.save();
+
+    setImmediate(async () => {
+      try {
+        await sendOTPEmail(email, otp, "reset");
+      } catch (err) {
+        console.error("forgotPassword email error:", err);
+      }
+    });
+
+    const resp = {
+      success: true,
+      message: "Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi",
+    };
+    if (process.env.NODE_ENV === "development") resp.devOtp = otp;
+    res.status(200).json(resp);
+  } catch (err) {
+    console.error("forgotPassword error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Lỗi server khi xử lý yêu cầu" });
+  }
+};
+
+/**
+ * Reset password with OTP (already present in file, keep behavior)
+ */
 exports.resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -173,7 +372,7 @@ exports.resetPassword = async (req, res) => {
     }
 
     // Check OTP
-    if (user.otp !== otp) {
+    if (user.otp !== otp && user.resetPasswordToken !== otp) {
       return res.status(400).json({
         success: false,
         message: "Mã OTP không đúng",
@@ -181,7 +380,10 @@ exports.resetPassword = async (req, res) => {
     }
 
     // Check if OTP expired
-    if (isOTPExpired(user.otpExpires)) {
+    if (
+      isOTPExpired(user.otpExpires) &&
+      (!user.resetPasswordExpires || Date.now() > user.resetPasswordExpires)
+    ) {
       return res.status(400).json({
         success: false,
         message: "Mã OTP đã hết hạn. Vui lòng yêu cầu đặt lại mật khẩu lại.",
@@ -212,9 +414,9 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
-// @desc    Change password
-// @route   PUT /api/auth/change-password
-// @access  Private
+/**
+ * Change password
+ */
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -235,7 +437,12 @@ exports.changePassword = async (req, res) => {
 
     const user = await User.findById(req.user.id).select("+password");
 
-    // Check current password
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Người dùng không tồn tại" });
+    }
+
     const isMatch = await user.comparePassword(currentPassword);
     if (!isMatch) {
       return res.status(401).json({
@@ -244,7 +451,6 @@ exports.changePassword = async (req, res) => {
       });
     }
 
-    // Set new password
     user.password = newPassword;
     await user.save();
 
@@ -264,9 +470,9 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// @desc    Logout user
-// @route   POST /api/auth/logout
-// @access  Private
+/**
+ * Logout
+ */
 exports.logout = async (req, res) => {
   try {
     res.cookie("refreshToken", "", {
@@ -288,9 +494,9 @@ exports.logout = async (req, res) => {
   }
 };
 
-// @desc    Get current logged in user
-// @route   GET /api/auth/me
-// @access  Private
+/**
+ * Get current logged in user
+ */
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -316,9 +522,9 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// @desc    Refresh token
-// @route   POST /api/auth/refresh-token
-// @access  Public
+/**
+ * Refresh token
+ */
 exports.refreshToken = async (req, res) => {
   try {
     const { refreshToken } = req.body;
@@ -330,7 +536,6 @@ exports.refreshToken = async (req, res) => {
       });
     }
 
-    const jwt = require("jsonwebtoken");
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
     const user = await User.findById(decoded.id);
@@ -348,7 +553,6 @@ exports.refreshToken = async (req, res) => {
       });
     }
 
-    // Generate new tokens
     sendTokenResponse(user, 200, res, "Refresh token thành công");
   } catch (error) {
     console.error("Refresh token error:", error);
