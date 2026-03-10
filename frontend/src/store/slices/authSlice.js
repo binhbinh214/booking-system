@@ -1,3 +1,4 @@
+// ...existing code...
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import authService from "../../services/auth.service";
 
@@ -9,6 +10,7 @@ const initialState = {
   error: null,
   requireVerification: false,
   verificationEmail: null,
+  verificationSuccess: false, // new flag for OTP success without immediate login
 };
 
 // Async thunks
@@ -16,7 +18,6 @@ export const register = createAsyncThunk(
   "auth/register",
   async (userData, { rejectWithValue }) => {
     try {
-      // Log registration attempt (hide password)
       console.log("📝 Attempting registration with:", {
         email: userData.email,
         fullName: userData.fullName,
@@ -29,7 +30,6 @@ export const register = createAsyncThunk(
       console.log("✅ Register response:", response.data);
       return response.data;
     } catch (error) {
-      // Enhanced error logging
       console.error("❌ Register error details:", {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -83,12 +83,11 @@ export const verifyOTP = createAsyncThunk(
       console.log("🔑 Verifying OTP for:", data.email);
       const response = await authService.verifyOTP(data);
       console.log("✅ Verify OTP response:", response.data);
-      return response.data;
+      return response.data; // may be { success: true, message: "...", data: { token, user } } OR { success: true, message: "..." }
     } catch (error) {
       console.error("❌ Verify OTP error:", error.response?.data);
-      return rejectWithValue(
-        error.response?.data?.message || "Xác thực OTP thất bại"
-      );
+      const msg = error.response?.data?.message || "Xác thực OTP thất bại";
+      return rejectWithValue(msg);
     }
   }
 );
@@ -171,6 +170,9 @@ const authSlice = createSlice({
       state.token = action.payload.token;
       state.isAuthenticated = true;
     },
+    clearVerificationSuccess: (state) => {
+      state.verificationSuccess = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -199,7 +201,6 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
 
-        // Backend response: { data: { user: {...}, token: "...", ... } }
         const responseData = action.payload.data || action.payload;
         const { token, user } = responseData;
 
@@ -230,32 +231,46 @@ const authSlice = createSlice({
       .addCase(verifyOTP.pending, (state) => {
         state.isLoading = true;
         state.error = null;
+        state.verificationSuccess = false;
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isLoading = false;
+        const payload = action.payload || {};
 
-        // Backend response: { data: { user: {...}, token: "...", ... } }
-        const responseData = action.payload.data || action.payload;
-        const { token, user } = responseData;
-
-        console.log("📦 Processing OTP - token:", !!token, "user:", !!user);
-
-        if (token && user) {
-          state.user = user;
-          state.token = token;
+        // Case A: backend returns token+user inside payload.data -> log user in
+        if (
+          payload.success &&
+          payload.data &&
+          payload.data.token &&
+          payload.data.user
+        ) {
+          state.user = payload.data.user;
+          state.token = payload.data.token;
           state.isAuthenticated = true;
           state.requireVerification = false;
           state.verificationEmail = null;
-          localStorage.setItem("token", token);
-          console.log("✅ OTP verification successful");
-        } else {
-          console.error("❌ Invalid OTP response:", action.payload);
-          state.error = "Lỗi xác thực. Vui lòng thử lại.";
+          state.verificationSuccess = true;
+          localStorage.setItem("token", payload.data.token);
+          console.log("✅ OTP verification -> user logged in");
+          return;
         }
+
+        // Case B: backend returns success (no token) -> mark verification success (user must login)
+        if (payload.success) {
+          state.requireVerification = false;
+          state.verificationEmail = null;
+          state.verificationSuccess = true;
+          state.error = null;
+          console.log("✅ OTP verification success (no token returned)");
+          return;
+        }
+
+        // Otherwise treat as error
+        state.error = payload.message || "Lỗi xác thực. Vui lòng thử lại.";
       })
       .addCase(verifyOTP.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload;
+        state.error = action.payload || "Xác thực OTP thất bại";
       })
       // Resend OTP
       .addCase(resendOTP.pending, (state) => {
@@ -282,5 +297,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, setCredentials } = authSlice.actions;
+export const { logout, clearError, setCredentials, clearVerificationSuccess } =
+  authSlice.actions;
 export default authSlice.reducer;
