@@ -33,7 +33,7 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 60000, // 30 seconds
+  timeout: 120000,
   withCredentials: true,
 });
 

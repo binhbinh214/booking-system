@@ -38,6 +38,7 @@ import toast from "react-hot-toast";
 import { getProviderById } from "../../store/slices/userSlice";
 import { getMe } from "../../store/slices/authSlice";
 import appointmentService from "../../services/appointment.service";
+import api from "../../services/api"; // add this near other imports
 
 const timeSlots = [
   "08:00",
@@ -123,6 +124,12 @@ const BookAppointment = () => {
   const handleConfirmBooking = async () => {
     setOpenConfirmDialog(false);
 
+    // create an idempotency key to avoid duplicate processing on server
+    const idempotencyKey =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `id-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
     try {
       setLoading(true);
 
@@ -134,37 +141,80 @@ const BookAppointment = () => {
         scheduledTime: formData.scheduledTime,
         reasonForVisit: formData.reasonForVisit,
         patientNotes: formData.patientNotes,
+        clientRef: idempotencyKey, // include client reference
+
         // appointmentType removed - server will force "online"
       };
-
       console.log("=== BOOKING APPOINTMENT ===");
       console.log("Appointment data:", appointmentData);
 
-      const response = await appointmentService.createAppointment(
-        appointmentData
-      );
+      let response;
+      try {
+        // try existing service first
+        response = await appointmentService.createAppointment(appointmentData);
+      } catch (err) {
+        // If timeout or network error, retry once with explicit idempotency header using api instance
+        const isTimeout =
+          err?.code === "ECONNABORTED" ||
+          (err?.message || "").toLowerCase().includes("timeout");
+        if (isTimeout) {
+          console.warn(
+            "Request timed out, retrying once with idempotency key...",
+            idempotencyKey
+          );
+          try {
+            response = await api.post("/appointments", appointmentData, {
+              headers: { "Idempotency-Key": idempotencyKey },
+              timeout: 120000,
+            });
+          } catch (retryErr) {
+            // final failure - but booking might have been processed by server
+            console.error("Retry after timeout failed:", retryErr);
+            throw retryErr;
+          }
+        } else {
+          throw err;
+        }
+      }
+      console.log("Booking response:", response?.data);
 
-      console.log("Booking response:", response.data);
-
-      if (response.data.success) {
-        // ===== REFRESH USER BALANCE =====
+      if (response?.data?.success) {
+        // Refresh user balance
         await dispatch(getMe()).unwrap();
-        console.log("✅ User balance refreshed");
-        // ================================
-
         toast.success(response.data.message || "Đặt lịch thành công!");
-
-        setTimeout(() => {
-          navigate("/appointments");
-        }, 1500);
+        setTimeout(() => navigate("/appointments"), 1500);
+      } else {
+        const msg =
+          response?.data?.message || "Không thể đặt lịch. Vui lòng thử lại.";
+        setError(msg);
+        toast.error(msg);
       }
     } catch (err) {
       console.error("Create appointment error:", err);
-      console.error("Error response:", err.response?.data);
-      const errorMsg =
-        err.response?.data?.message || "Không thể đặt lịch. Vui lòng thử lại.";
-      setError(errorMsg);
-      toast.error(errorMsg);
+      // If timeout happened and we couldn't confirm, refresh user and instruct user to check appointments
+      if (
+        err?.code === "ECONNABORTED" ||
+        (err?.message || "").toLowerCase().includes("timeout")
+      ) {
+        // try to refresh user balance/state anyway
+        try {
+          await dispatch(getMe()).unwrap();
+        } catch (e) {
+          /* ignore */
+        }
+        const msg =
+          "Yêu cầu quá thời gian chờ. Có thể đặt lịch đã thành công. Vui lòng kiểm tra trang Lịch hẹn.";
+        setError(msg);
+        toast(msg, { icon: "⚠️" });
+        // navigate user to appointments to verify
+        setTimeout(() => navigate("/appointments"), 1500);
+      } else {
+        const errorMsg =
+          err.response?.data?.message ||
+          "Không thể đặt lịch. Vui lòng thử lại.";
+        setError(errorMsg);
+        toast.error(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
