@@ -1,13 +1,26 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import authService from "../../services/auth.service";
 
+const token =
+  typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
 const initialState = {
   user: null,
-  token: typeof window !== "undefined" ? localStorage.getItem("token") : null,
-  isAuthenticated: false,
+  token,
+  // isAuthenticated true when token exists so PrivateRoute won't redirect incorrectly on reload
+  isAuthenticated: !!token,
   isLoading: false,
   error: null,
-  // OTP flow removed
+};
+
+// Helpers
+const normalizeResponse = (payload) => {
+  // support shapes: { data: {...} }, {...}, { success, data: {...} }
+  const p = payload?.data ?? payload ?? {};
+  // If the payload is already the user object (no wrapper)
+  const user = p.user ?? p.data ?? p;
+  const token = p.token ?? payload?.token ?? null;
+  return { user, token };
 };
 
 // thunks
@@ -66,16 +79,30 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      state.error = null;
       localStorage.removeItem("token");
     },
     clearError: (state) => {
       state.error = null;
     },
     setCredentials: (state, action) => {
-      state.user = action.payload.user;
-      state.token = action.payload.token;
-      state.isAuthenticated = true;
-      localStorage.setItem("token", action.payload.token);
+      const { user, token } = action.payload;
+      if (user) state.user = user;
+      if (token) {
+        state.token = token;
+        localStorage.setItem("token", token);
+      }
+      state.isAuthenticated = !!(user || token);
+    },
+    // merge updates into user (useful to update balance after deposit/topup)
+    updateUser: (state, action) => {
+      if (state.user && typeof state.user === "object") {
+        state.user = { ...state.user, ...action.payload };
+      } else if (action.payload) {
+        state.user = action.payload;
+      }
+      // keep isAuthenticated true if token exists
+      state.isAuthenticated = !!(state.token || state.user);
     },
   },
   extraReducers: (builder) => {
@@ -85,13 +112,12 @@ const authSlice = createSlice({
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(register.fulfilled, (state, action) => {
+      .addCase(register.fulfilled, (state) => {
         state.isLoading = false;
-        // registration complete — no OTP required
       })
       .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload;
+        state.error = action.payload || action.error?.message;
       })
 
       // login
@@ -100,20 +126,23 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(login.fulfilled, (state, action) => {
-        const payload = action.payload?.data || action.payload;
-        if (payload?.token && payload?.user) {
-          state.user = payload.user;
-          state.token = payload.token;
-          state.isAuthenticated = true;
-          localStorage.setItem("token", payload.token);
-        } else {
+        state.isLoading = false;
+        const { user, token } = normalizeResponse(action.payload);
+        if (token) {
+          state.token = token;
+          localStorage.setItem("token", token);
+        }
+        if (user && typeof user === "object" && Object.keys(user).length) {
+          state.user = user;
+        }
+        state.isAuthenticated = !!(state.token || state.user);
+        if (!state.isAuthenticated) {
           state.error = "Đăng nhập không hợp lệ";
         }
-        state.isLoading = false;
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.payload;
+        state.error = action.payload || action.error?.message;
       })
 
       // getMe
@@ -123,28 +152,26 @@ const authSlice = createSlice({
       })
       .addCase(getMe.fulfilled, (state, action) => {
         state.isLoading = false;
-        const payload = action.payload?.data || action.payload || {};
-        if (payload.user) {
-          state.user = payload.user;
+        const { user, token } = normalizeResponse(action.payload);
+        if (user && typeof user === "object" && Object.keys(user).length) {
+          state.user = user;
         }
-        if (payload.token) {
-          state.token = payload.token;
-          localStorage.setItem("token", payload.token);
-          state.isAuthenticated = true;
-        } else if (state.token) {
-          state.isAuthenticated = true;
+        if (token) {
+          state.token = token;
+          localStorage.setItem("token", token);
         }
+        // If we have either a token or user, consider authenticated
+        state.isAuthenticated = !!(state.token || state.user);
       })
       .addCase(getMe.rejected, (state, action) => {
+        // don't forcibly logout on transient getMe failures (network/server)
         state.isLoading = false;
-        state.user = null;
-        state.token = null;
-        state.isAuthenticated = false;
-        localStorage.removeItem("token");
         state.error = action.payload || action.error?.message;
+        // Note: handle token expiry/401 in axios interceptor to call logout()
       });
   },
 });
 
-export const { logout, clearError, setCredentials } = authSlice.actions;
+export const { logout, clearError, setCredentials, updateUser } =
+  authSlice.actions;
 export default authSlice.reducer;

@@ -561,7 +561,7 @@ const Dashboard = () => {
                     Số dư
                   </Typography>
                   <Typography variant="h4" sx={{ fontWeight: 700 }}>
-                    {((user?.balance || 0) / 1000).toFixed(0)}K
+                    (user?.balance || 0).toLocaleString("vi-VN")
                   </Typography>
                 </Box>
                 <Avatar sx={{ bgcolor: "#ff980020", color: "#ff9800" }}>
