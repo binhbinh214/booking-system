@@ -11,6 +11,7 @@ const crypto = require("crypto");
 // @desc    Register user
 // @route   POST /api/auth/register
 // @access  Public
+// ...existing code...
 exports.register = async (req, res) => {
   try {
     const { email, password, fullName, phone, role } = req.body;
@@ -32,7 +33,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Create user
+    // Create user (User model should handle password hashing)
     const user = await User.create({
       email,
       password,
@@ -43,50 +44,56 @@ exports.register = async (req, res) => {
       isVerified: false,
     });
 
-    // Generate OTP for email verification
+    // Generate OTP for email verification and persist to user
     const otp = generateOTP();
     user.otp = otp;
     user.otpExpires = getOTPExpiry();
     await user.save();
 
-    // Send OTP email
-    console.log(`\n${"=".repeat(50)}`);
-    console.log(`📧 Sending registration OTP to: ${email}`);
-    const emailResult = await sendOTPEmail(email, otp, "verification");
-
-    // Log OTP to console in development mode for easy testing
-    if (process.env.NODE_ENV === "development") {
-      console.log(`🔑 OTP Code: ${otp}`);
-      console.log(
-        `📧 Email sent status: ${
-          emailResult.success ? "✅ Success" : "❌ Failed"
-        }`
-      );
-      if (!emailResult.success) {
-        console.log(`❌ Email error: ${emailResult.error}`);
-      }
-    }
-    console.log(`${"=".repeat(50)}\n`);
-
-    // Response based on email result
+    // Prepare response immediately (do not wait for email send)
     const responseData = {
       success: true,
-      message: emailResult.success
-        ? "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản."
-        : "Đăng ký thành công nhưng có lỗi khi gửi email. Vui lòng yêu cầu gửi lại OTP.",
+      message:
+        "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
       data: {
         userId: user._id,
         email: user.email,
-        emailSent: emailResult.success,
+        emailSent: false, // will be attempted in background
       },
     };
 
-    // Include OTP in response for development only
+    // Include OTP in response for development only (convenience)
     if (process.env.NODE_ENV === "development") {
       responseData.data.devOtp = otp;
     }
 
+    // send response now
     res.status(201).json(responseData);
+
+    // Send OTP email in background (non-blocking)
+    setImmediate(async () => {
+      try {
+        console.log(`\n${"=".repeat(50)}`);
+        console.log(`📧 Sending registration OTP to: ${email}`);
+        const emailResult = await sendOTPEmail(email, otp, "verification");
+
+        if (process.env.NODE_ENV === "development") {
+          console.log(`🔑 OTP Code: ${otp}`);
+          console.log(
+            `📧 Email sent status: ${
+              emailResult?.success ? "✅ Success" : "❌ Failed"
+            }`
+          );
+          if (!emailResult?.success) {
+            console.log(`❌ Email error: ${emailResult?.error || "unknown"}`);
+          }
+        }
+
+        console.log(`${"=".repeat(50)}\n`);
+      } catch (err) {
+        console.error("Error sending registration OTP (background):", err);
+      }
+    });
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({
@@ -96,322 +103,7 @@ exports.register = async (req, res) => {
     });
   }
 };
-
-// @desc    Verify email with OTP
-// @route   POST /api/auth/verify-otp
-// @access  Public
-exports.verifyOTP = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng cung cấp email và mã OTP",
-      });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy người dùng",
-      });
-    }
-
-    // Check OTP
-    if (user.otp !== otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP không đúng",
-      });
-    }
-
-    // Check if OTP expired
-    if (isOTPExpired(user.otpExpires)) {
-      return res.status(400).json({
-        success: false,
-        message: "Mã OTP đã hết hạn. Vui lòng yêu cầu gửi lại mã mới.",
-      });
-    }
-
-    // Verify user
-    user.isVerified = true;
-    user.status = "active";
-    user.otp = undefined;
-    user.otpExpires = undefined;
-    await user.save();
-
-    // Send welcome email (don't block the response)
-    sendWelcomeEmail(user.email, user.fullName).catch((err) => {
-      console.error("Error sending welcome email:", err);
-    });
-
-    // Send token response
-    sendTokenResponse(user, 200, res, "Xác thực email thành công");
-  } catch (error) {
-    console.error("Verify OTP error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// @desc    Resend OTP
-// @route   POST /api/auth/resend-otp
-// @access  Public
-exports.resendOTP = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng cung cấp email",
-      });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Không tìm thấy người dùng",
-      });
-    }
-
-    if (user.isVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Tài khoản đã được xác thực",
-      });
-    }
-
-    // Generate new OTP
-    const otp = generateOTP();
-    user.otp = otp;
-    user.otpExpires = getOTPExpiry();
-    await user.save();
-
-    // Send OTP email
-    console.log(`\n${"=".repeat(50)}`);
-    console.log(`📧 Resending OTP to: ${email}`);
-    const emailResult = await sendOTPEmail(email, otp, "verification");
-
-    // Log OTP to console in development mode
-    if (process.env.NODE_ENV === "development") {
-      console.log(`🔑 OTP Code: ${otp}`);
-      console.log(
-        `📧 Email sent status: ${
-          emailResult.success ? "✅ Success" : "❌ Failed"
-        }`
-      );
-      if (!emailResult.success) {
-        console.log(`❌ Email error: ${emailResult.error}`);
-      }
-    }
-    console.log(`${"=".repeat(50)}\n`);
-
-    const responseData = {
-      success: true,
-      message: emailResult.success
-        ? "Đã gửi lại mã OTP"
-        : "Có lỗi khi gửi email. Vui lòng thử lại sau.",
-    };
-
-    // Include OTP in response for development only
-    if (process.env.NODE_ENV === "development") {
-      responseData.devOtp = otp;
-    }
-
-    res.status(200).json(responseData);
-  } catch (error) {
-    console.error("Resend OTP error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// @desc    Login user
-// @route   POST /api/auth/login
-// @access  Public
-exports.login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng cung cấp email và mật khẩu",
-      });
-    }
-
-    // Check for user
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Email hoặc mật khẩu không đúng",
-      });
-    }
-
-    // Check if password matches
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Email hoặc mật khẩu không đúng",
-      });
-    }
-
-    // Check if user is suspended
-    if (user.status === "suspended") {
-      return res.status(403).json({
-        success: false,
-        message: "Tài khoản của bạn đã bị tạm khóa. Vui lòng liên hệ hỗ trợ.",
-      });
-    }
-
-    // Check if user is verified
-    if (!user.isVerified) {
-      // Generate new OTP
-      const otp = generateOTP();
-      user.otp = otp;
-      user.otpExpires = getOTPExpiry();
-      await user.save();
-
-      // Send OTP email
-      console.log(`\n${"=".repeat(50)}`);
-      console.log(`📧 Sending verification OTP to unverified user: ${email}`);
-      const emailResult = await sendOTPEmail(email, otp, "verification");
-
-      // Log OTP to console in development mode
-      if (process.env.NODE_ENV === "development") {
-        console.log(`🔑 OTP Code: ${otp}`);
-        console.log(
-          `📧 Email sent status: ${
-            emailResult.success ? "✅ Success" : "❌ Failed"
-          }`
-        );
-      }
-      console.log(`${"=".repeat(50)}\n`);
-
-      const responseData = {
-        success: false,
-        message: emailResult.success
-          ? "Tài khoản chưa được xác thực. Chúng tôi đã gửi mã OTP mới đến email của bạn."
-          : "Tài khoản chưa được xác thực. Có lỗi khi gửi OTP, vui lòng yêu cầu gửi lại.",
-        requireVerification: true,
-      };
-
-      // Include OTP in response for development only
-      if (process.env.NODE_ENV === "development") {
-        responseData.devOtp = otp;
-      }
-
-      return res.status(403).json(responseData);
-    }
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Send token response
-    sendTokenResponse(user, 200, res, "Đăng nhập thành công");
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// @desc    Forgot password
-// @route   POST /api/auth/forgot-password
-// @access  Public
-exports.forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Vui lòng cung cấp email",
-      });
-    }
-
-    const user = await User.findOne({ email });
-
-    // Always return success to prevent email enumeration
-    if (!user) {
-      return res.status(200).json({
-        success: true,
-        message:
-          "Nếu email tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu.",
-      });
-    }
-
-    // Generate OTP for password reset
-    const otp = generateOTP();
-    user.otp = otp;
-    user.otpExpires = getOTPExpiry();
-
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    user.resetPasswordToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-    user.resetPasswordExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-    await user.save();
-
-    // Send OTP email
-    console.log(`\n${"=".repeat(50)}`);
-    console.log(`📧 Sending password reset OTP to: ${email}`);
-    const emailResult = await sendOTPEmail(email, otp, "reset");
-
-    // Log OTP to console in development mode
-    if (process.env.NODE_ENV === "development") {
-      console.log(`🔑 Reset Password OTP: ${otp}`);
-      console.log(
-        `📧 Email sent status: ${
-          emailResult.success ? "✅ Success" : "❌ Failed"
-        }`
-      );
-      if (!emailResult.success) {
-        console.log(`❌ Email error: ${emailResult.error}`);
-      }
-    }
-    console.log(`${"=".repeat(50)}\n`);
-
-    const responseData = {
-      success: true,
-      message:
-        "Nếu email tồn tại, chúng tôi đã gửi hướng dẫn đặt lại mật khẩu.",
-    };
-
-    // Include OTP in response for development only
-    if (process.env.NODE_ENV === "development") {
-      responseData.devOtp = otp;
-    }
-
-    res.status(200).json(responseData);
-  } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
+// ...existing code...
 
 // @desc    Reset password with OTP
 // @route   POST /api/auth/reset-password
