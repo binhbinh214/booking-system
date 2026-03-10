@@ -1,3 +1,4 @@
+// ...existing code...
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -40,10 +41,10 @@ const Login = () => {
     };
   }, [dispatch]);
 
-  // Nếu đã đăng nhập thành công, chuyển vào dashboard
+  // Nếu đã đăng nhập thành công, chuyển vào home (thay vì dashboard)
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/dashboard", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -167,3 +168,4 @@ const Login = () => {
 };
 
 export default Login;
+// ...existing code...
