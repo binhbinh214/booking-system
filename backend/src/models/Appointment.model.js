@@ -16,7 +16,7 @@ const appointmentSchema = new mongoose.Schema(
 
     providerType: {
       type: String,
-      enum: ["doctor", "therapist", "counselor"],
+      enum: ["doctor", "healer", "therapist", "counselor"],
       required: true,
     },
 
@@ -146,7 +146,7 @@ appointmentSchema.index({ provider: 1, scheduledDate: 1 });
 // Query by status
 appointmentSchema.index({ status: 1, scheduledDate: 1 });
 
-// 🔴 IMPORTANT: Prevent double booking
+// 🔴 IMPORTANT: Prevent double booking (provider + date + time)
 appointmentSchema.index(
   { provider: 1, scheduledDate: 1, scheduledTime: 1 },
   { unique: true }
@@ -157,7 +157,9 @@ appointmentSchema.index(
 // ============================
 
 appointmentSchema.virtual("formattedDate").get(function () {
-  return this.scheduledDate.toLocaleDateString("vi-VN");
+  return this.scheduledDate
+    ? this.scheduledDate.toLocaleDateString("vi-VN")
+    : null;
 });
 
 // ============================

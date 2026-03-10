@@ -49,20 +49,13 @@ const Register = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { isLoading, error, requireVerification, verificationEmail } =
-    useSelector((state) => state.auth);
+  const { isLoading, error } = useSelector((state) => state.auth);
 
   useEffect(() => {
     return () => {
       dispatch(clearError());
     };
   }, [dispatch]);
-
-  useEffect(() => {
-    if (requireVerification && verificationEmail) {
-      navigate("/verify-otp", { state: { email: verificationEmail } });
-    }
-  }, [requireVerification, verificationEmail, navigate]);
 
   const formik = useFormik({
     initialValues: {
@@ -76,7 +69,9 @@ const Register = () => {
     validationSchema,
     onSubmit: async (values) => {
       const { confirmPassword, ...data } = values;
-      dispatch(register(data));
+      await dispatch(register(data));
+      // registration complete — user can login immediately
+      navigate("/login");
     },
   });
 

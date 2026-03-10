@@ -108,7 +108,6 @@ api.interceptors.response.use(
         "/login",
         "/register",
         "/forgot-password",
-        "/verify-otp",
         "/reset-password",
       ];
       const currentPath = window.location.pathname;
