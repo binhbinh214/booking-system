@@ -1,3 +1,4 @@
+// ...existing code...
 import React, { useEffect } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
@@ -72,7 +73,8 @@ const PublicRoute = ({ children }) => {
   const { isAuthenticated } = useSelector((state) => state.auth);
 
   if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
+    // Redirect to homepage after login instead of dashboard
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -234,3 +236,4 @@ function App() {
 }
 
 export default App;
+// ...existing code...

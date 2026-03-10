@@ -1,6 +1,6 @@
 // ...existing code...
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
   Card,
@@ -30,23 +30,13 @@ const validationSchema = Yup.object({
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const dispatch = useDispatch();
-  const navigate = useNavigate();
-  const { isLoading, error, isAuthenticated } = useSelector(
-    (state) => state.auth
-  );
+  const { isLoading, error } = useSelector((state) => state.auth);
 
   useEffect(() => {
     return () => {
       dispatch(clearError());
     };
   }, [dispatch]);
-
-  // Nếu đã đăng nhập thành công, chuyển vào home (thay vì dashboard)
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/", { replace: true });
-    }
-  }, [isAuthenticated, navigate]);
 
   const formik = useFormik({
     initialValues: {
