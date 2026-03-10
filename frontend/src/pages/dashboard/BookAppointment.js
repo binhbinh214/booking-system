@@ -176,7 +176,7 @@ const BookAppointment = () => {
 
       console.log("Booking response:", response?.data);
 
-      if (response?.data?.success) {
+      if (response && (response.status === 200 || response.status === 201)) {
         // Refresh user balance & navigate
         try {
           await dispatch(getMe()).unwrap();

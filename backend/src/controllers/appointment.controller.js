@@ -143,166 +143,138 @@ const createAppointment = async (req, res) => {
       appointment: appointment._id,
     });
 
-    const populatedAppointment = await Appointment.findById(appointment._id)
+    const populatedAppointment = await Appointment.findById(
+      appointment._1d ? appointment._id : appointment._id
+    )
       .populate("patient", "fullName email phone avatar")
       .populate("provider", "fullName email phone avatar role specialization")
       .populate("paymentId");
 
     console.log("✅ Appointment created:", populatedAppointment._id);
 
-    // Send email notification to provider about new booking
-    try {
-      await sendEmail({
-        email: provider.email,
-        subject: "🔔 Có lịch hẹn mới cần xác nhận - Mental Healthcare",
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"></head>
-          <body style="font-family: Arial, sans-serif;">
-            <div style="max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1>🧠 Mental Healthcare</h1>
-                <p>Có lịch hẹn mới!</p>
-              </div>
-              <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                <h2>Xin chào ${provider.fullName}!</h2>
-                <p>Bạn có lịch hẹn mới cần xác nhận:</p>
-                
-                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-                  <p><strong>👤 Bệnh nhân:</strong> ${patient.fullName}</p>
-                  <p><strong>📅 Ngày:</strong> ${new Date(
-                    scheduledDate
-                  ).toLocaleDateString("vi-VN", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}</p>
-                  <p><strong>⏰ Giờ:</strong> ${scheduledTime}</p>
-                  <p><strong>📝 Lý do:</strong> ${reasonForVisit}</p>
-                  <p><strong>💰 Phí:</strong> ${consultationFee.toLocaleString(
-                    "vi-VN"
-                  )}đ (Đã thanh toán)</p>
-                </div>
-                
-                <p style="color: #e74c3c;">⚠️ Vui lòng xác nhận hoặc từ chối lịch hẹn này trong vòng 24 giờ.</p>
-                
-                <center>
-                  <a href="${
-                    process.env.FRONTEND_URL || "http://localhost:3000"
-                  }/provider/appointments" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; margin-top: 15px;">
-                    Xem lịch hẹn
-                  </a>
-                </center>
-              </div>
-            </div>
-          </body>
-          </html>
-        `,
-      });
-      console.log("✅ Email sent to provider:", provider.email);
-    } catch (emailError) {
-      console.error("Email sending failed:", emailError.message);
-    }
-
-    // Send confirmation email to patient
-    try {
-      await sendEmail({
-        email: patient.email,
-        subject: "✅ Đặt lịch thành công - Mental Healthcare",
-        html: `
-          <!DOCTYPE html>
-          <html>
-          <head><meta charset="utf-8"></head>
-          <body style="font-family: Arial, sans-serif;">
-            <div style="max-width: 600px; margin: 0 auto;">
-              <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-                <h1>🧠 Mental Healthcare</h1>
-                <p>Đặt lịch thành công!</p>
-              </div>
-              <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
-                <h2>Xin chào ${patient.fullName}!</h2>
-                <p>Bạn đã đặt lịch hẹn thành công. Vui lòng chờ chuyên gia xác nhận.</p>
-                
-                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
-                  <p><strong>👨‍⚕️ Chuyên gia:</strong> ${provider.fullName}</p>
-                  <p><strong>📅 Ngày:</strong> ${new Date(
-                    scheduledDate
-                  ).toLocaleDateString("vi-VN", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}</p>
-                  <p><strong>⏰ Giờ:</strong> ${scheduledTime}</p>
-                  <p><strong>💰 Phí:</strong> ${consultationFee.toLocaleString(
-                    "vi-VN"
-                  )}đ (Đã thanh toán)</p>
-                </div>
-                
-                <p style="color: #27ae60;">✅ Bạn sẽ nhận được email xác nhận kèm link cuộc họp khi chuyên gia chấp nhận lịch hẹn.</p>
-              </div>
-            </div>
-          </body>
-          </html>
-        `,
-      });
-      console.log("✅ Email sent to patient:", patient.email);
-    } catch (emailError) {
-      console.error("Email sending failed:", emailError.message);
-    }
-
+    // Respond immediately to client
     res.status(201).json({
       success: true,
       message: "Đặt lịch thành công! Vui lòng chờ chuyên gia xác nhận.",
       data: populatedAppointment,
     });
+
+    // SEND EMAILS IN BACKGROUND (non-blocking)
+    setImmediate(async () => {
+      // Provider notification
+      try {
+        await sendEmail({
+          email: provider.email,
+          subject: "🔔 Có lịch hẹn mới cần xác nhận - Mental Healthcare",
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: Arial, sans-serif;">
+              <div style="max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                  <h1>🧠 Mental Healthcare</h1>
+                  <p>Có lịch hẹn mới!</p>
+                </div>
+                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                  <h2>Xin chào ${provider.fullName}!</h2>
+                  <p>Bạn có lịch hẹn mới cần xác nhận:</p>
+                  
+                  <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+                    <p><strong>👤 Bệnh nhân:</strong> ${patient.fullName}</p>
+                    <p><strong>📅 Ngày:</strong> ${new Date(
+                      scheduledDate
+                    ).toLocaleDateString("vi-VN", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}</p>
+                    <p><strong>⏰ Giờ:</strong> ${scheduledTime}</p>
+                    <p><strong>📝 Lý do:</strong> ${reasonForVisit}</p>
+                    <p><strong>💰 Phí:</strong> ${consultationFee.toLocaleString(
+                      "vi-VN"
+                    )}đ (Đã thanh toán)</p>
+                  </div>
+                  
+                  <p style="color: #e74c3c;">⚠️ Vui lòng xác nhận hoặc từ chối lịch hẹn này trong vòng 24 giờ.</p>
+                  
+                  <center>
+                    <a href="${
+                      process.env.FRONTEND_URL || "http://localhost:3000"
+                    }/provider/appointments" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; margin-top: 15px;">
+                      Xem lịch hẹn
+                    </a>
+                  </center>
+                </div>
+              </div>
+            </body>
+            </html>
+          `,
+        });
+        console.log("✅ Provider email queued/sent:", provider.email);
+      } catch (emailError) {
+        console.error(
+          "Provider email error:",
+          emailError.message || emailError
+        );
+      }
+
+      // Patient confirmation
+      try {
+        await sendEmail({
+          email: patient.email,
+          subject: "✅ Đặt lịch thành công - Mental Healthcare",
+          html: `
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: Arial, sans-serif;">
+              <div style="max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+                  <h1>🧠 Mental Healthcare</h1>
+                  <p>Đặt lịch thành công!</p>
+                </div>
+                <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px;">
+                  <h2>Xin chào ${patient.fullName}!</h2>
+                  <p>Bạn đã đặt lịch hẹn thành công. Vui lòng chờ chuyên gia xác nhận.</p>
+                  
+                  <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea;">
+                    <p><strong>👨‍⚕️ Chuyên gia:</strong> ${provider.fullName}</p>
+                    <p><strong>📅 Ngày:</strong> ${new Date(
+                      scheduledDate
+                    ).toLocaleDateString("vi-VN", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}</p>
+                    <p><strong>⏰ Giờ:</strong> ${scheduledTime}</p>
+                    <p><strong>💰 Phí:</strong> ${consultationFee.toLocaleString(
+                      "vi-VN"
+                    )}đ (Đã thanh toán)</p>
+                  </div>
+                  
+                  <p style="color: #27ae60;">✅ Bạn sẽ nhận được email xác nhận kèm link cuộc họp khi chuyên gia chấp nhận lịch hẹn.</p>
+                </div>
+              </div>
+            </body>
+            </html>
+          `,
+        });
+        console.log("✅ Patient email queued/sent:", patient.email);
+      } catch (emailError) {
+        console.error("Patient email error:", emailError.message || emailError);
+      }
+    });
+
+    return;
   } catch (error) {
     console.error("Create appointment error:", error);
     res.status(500).json({
       success: false,
       message: "Lỗi server khi tạo lịch hẹn",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// Get my appointments (for patients)
-const getMyAppointments = async (req, res) => {
-  try {
-    const { status, limit = 20, page = 1 } = req.query;
-
-    const query = { patient: req.user.id };
-
-    if (status) {
-      const statusArray = status.split(",").map((s) => s.trim());
-      query.status = { $in: statusArray };
-    }
-
-    const appointments = await Appointment.find(query)
-      .populate("provider", "fullName email phone avatar role specialization")
-      .populate("paymentId", "amount status")
-      .sort({ scheduledDate: -1, scheduledTime: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-
-    const total = await Appointment.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: appointments,
-      pagination: {
-        total,
-        page: parseInt(page),
-        pages: Math.ceil(total / parseInt(limit)),
-      },
-    });
-  } catch (error) {
-    console.error("Get my appointments error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi server khi lấy danh sách lịch hẹn",
     });
   }
 };
