@@ -12,6 +12,7 @@ const crypto = require("crypto");
 // @route   POST /api/auth/register
 // @access  Public
 // ...existing code...
+// ...existing code...
 exports.register = async (req, res) => {
   try {
     const { email, password, fullName, phone, role } = req.body;
@@ -24,7 +25,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Check if user exists
+    // Check if user exists (fast fail)
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -33,16 +34,28 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Create user (User model should handle password hashing)
-    const user = await User.create({
-      email,
-      password,
-      fullName,
-      phone,
-      role: role || "customer",
-      status: "pending",
-      isVerified: false,
-    });
+    // Create user (handle duplicate-key race)
+    let user;
+    try {
+      user = await User.create({
+        email,
+        password,
+        fullName,
+        phone,
+        role: role || "customer",
+        status: "pending",
+        isVerified: false,
+      });
+    } catch (createErr) {
+      // Race condition: another request created same email
+      if (createErr && createErr.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: "Email đã được sử dụng",
+        });
+      }
+      throw createErr;
+    }
 
     // Generate OTP for email verification and persist to user
     const otp = generateOTP();
@@ -62,20 +75,40 @@ exports.register = async (req, res) => {
       },
     };
 
-    // Include OTP in response for development only (convenience)
     if (process.env.NODE_ENV === "development") {
       responseData.data.devOtp = otp;
     }
 
-    // send response now
+    // Log and send response
+    console.log("✅ Register: sending immediate response for", email);
     res.status(201).json(responseData);
 
-    // Send OTP email in background (non-blocking)
+    // Ensure we stop here for response path
+    // SEND OTP EMAIL IN BACKGROUND (non-blocking) with a short timeout
     setImmediate(async () => {
       try {
         console.log(`\n${"=".repeat(50)}`);
         console.log(`📧 Sending registration OTP to: ${email}`);
-        const emailResult = await sendOTPEmail(email, otp, "verification");
+
+        // wrap sendOTPEmail with timeout to avoid long blocking operations
+        const sendWithTimeout = (ms) =>
+          Promise.race([
+            sendOTPEmail(email, otp, "verification"),
+            new Promise((_, rej) =>
+              setTimeout(() => rej(new Error("sendOTPEmail timeout")), ms)
+            ),
+          ]);
+
+        let emailResult = { success: false };
+        try {
+          emailResult = await sendWithTimeout(15000); // 15s timeout for sending
+        } catch (err) {
+          console.error(
+            "📛 sendOTPEmail failed or timed out:",
+            err?.message || err
+          );
+          emailResult = { success: false, error: err?.message || err };
+        }
 
         if (process.env.NODE_ENV === "development") {
           console.log(`🔑 OTP Code: ${otp}`);
@@ -94,8 +127,12 @@ exports.register = async (req, res) => {
         console.error("Error sending registration OTP (background):", err);
       }
     });
+
+    return;
   } catch (error) {
     console.error("Register error:", error);
+    // If headers already sent, nothing to do
+    if (res.headersSent) return;
     res.status(500).json({
       success: false,
       message: "Lỗi server",
@@ -103,6 +140,7 @@ exports.register = async (req, res) => {
     });
   }
 };
+// ...existing code...
 // ...existing code...
 
 // @desc    Reset password with OTP
