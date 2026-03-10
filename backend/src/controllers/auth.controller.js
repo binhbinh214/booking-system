@@ -16,6 +16,13 @@ const jwt = require("jsonwebtoken");
  * - responds immediately
  * - sends OTP email in background with timeout
  */
+/**
+ * Register user
+ * - creates user (handles duplicate key)
+ * - generates and stores OTP
+ * - SENDS EMAIL IMMEDIATELY (not background)
+ * - responds based on email result
+ */
 exports.register = async (req, res) => {
   try {
     const { email, password, fullName, phone, role } = req.body;
@@ -27,7 +34,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // fast check
+    // Check existing user
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
@@ -36,7 +43,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // create user with duplicate-key handling
+    // Create user with duplicate-key handling
     let user;
     try {
       user = await User.create({
@@ -58,77 +65,69 @@ exports.register = async (req, res) => {
       throw createErr;
     }
 
-    // generate and persist OTP
+    // Generate OTP
     const otp = generateOTP();
     user.otp = otp;
     user.otpExpires = getOTPExpiry();
     await user.save();
 
-    // immediate response
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`📧 ĐĂNG KÝ MỚI: ${email}`);
+    console.log(`🔑 OTP: ${otp}`);
+    console.log(`${"=".repeat(60)}`);
+
+    // GỬI EMAIL NGAY - KHÔNG PHẢI BACKGROUND
+    let emailResult = { success: false };
+    try {
+      console.log(`📨 Đang gửi email OTP...`);
+
+      const sendWithTimeout = (ms) =>
+        Promise.race([
+          sendOTPEmail(email, otp, "verification"),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout sau 20 giây")), ms)
+          ),
+        ]);
+
+      emailResult = await sendWithTimeout(20000); // 20 seconds timeout
+
+      if (emailResult.success) {
+        console.log(`✅ Email đã gửi thành công!`);
+      } else {
+        console.error(`❌ Email thất bại:`, emailResult.error);
+      }
+    } catch (err) {
+      console.error(`❌ Lỗi gửi email:`, err?.message || err);
+      emailResult = { success: false, error: err?.message || String(err) };
+    }
+
+    console.log(`${"=".repeat(60)}\n`);
+
+    // Prepare response
     const responseData = {
       success: true,
-      message:
-        "Đăng ký thành công. Vui lòng kiểm tra email để xác thực tài khoản.",
+      message: emailResult.success
+        ? "Đăng ký thành công! Vui lòng kiểm tra email để nhận mã OTP."
+        : "Đăng ký thành công nhưng không thể gửi email. Vui lòng nhấn 'Gửi lại OTP'.",
       data: {
         userId: user._id,
         email: user.email,
-        emailSent: false,
+        emailSent: emailResult.success,
       },
     };
+
+    // Development mode - include OTP in response
     if (process.env.NODE_ENV === "development") {
       responseData.data.devOtp = otp;
+      responseData.data.emailError = emailResult.error;
     }
-    console.log("✅ Register: sending immediate response for", email);
-    res.status(201).json(responseData);
 
-    // send OTP in background with timeout
-    setImmediate(async () => {
-      try {
-        console.log(`\n${"=".repeat(50)}`);
-        console.log(`📧 Sending registration OTP to: ${email}`);
-
-        const sendWithTimeout = (ms) =>
-          Promise.race([
-            sendOTPEmail(email, otp, "verification"),
-            new Promise((_, rej) =>
-              setTimeout(() => rej(new Error("sendOTPEmail timeout")), ms)
-            ),
-          ]);
-
-        let emailResult = { success: false };
-        try {
-          emailResult = await sendWithTimeout(15000);
-        } catch (err) {
-          console.error(
-            "📛 sendOTPEmail failed or timed out:",
-            err?.message || err
-          );
-          emailResult = { success: false, error: err?.message || err };
-        }
-
-        if (process.env.NODE_ENV === "development") {
-          console.log(`🔑 OTP Code: ${otp}`);
-          console.log(
-            `📧 Email sent status: ${
-              emailResult?.success ? "✅ Success" : "❌ Failed"
-            }`
-          );
-          if (!emailResult?.success) {
-            console.log(`❌ Email error: ${emailResult?.error || "unknown"}`);
-          }
-        }
-
-        console.log(`${"=".repeat(50)}\n`);
-      } catch (err) {
-        console.error("Error sending registration OTP (background):", err);
-      }
-    });
-
-    return;
+    return res.status(201).json(responseData);
   } catch (error) {
-    console.error("Register error:", error);
+    console.error("❌ Register error:", error);
     if (res.headersSent) return;
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: "Lỗi server",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
@@ -255,44 +254,74 @@ exports.verifyOTP = async (req, res) => {
 /**
  * Resend OTP
  */
+/**
+ * Resend OTP - SEND IMMEDIATELY
+ */
 exports.resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email)
-      return res
-        .status(400)
-        .json({ success: false, message: "Email là bắt buộc" });
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email là bắt buộc",
+      });
+    }
 
     const user = await User.findOne({ email });
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "Người dùng không tồn tại" });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Người dùng không tồn tại",
+      });
+    }
 
     const otp = generateOTP();
     user.otp = otp;
     user.otpExpires = getOTPExpiry();
     await user.save();
 
-    setImmediate(async () => {
-      try {
-        await sendOTPEmail(email, otp, "verification");
-      } catch (err) {
-        console.error("resendOTP email error:", err);
+    console.log(`\n${"=".repeat(60)}`);
+    console.log(`📧 GỬI LẠI OTP: ${email}`);
+    console.log(`🔑 OTP: ${otp}`);
+    console.log(`${"=".repeat(60)}`);
+
+    // GỬI EMAIL NGAY
+    let emailResult = { success: false };
+    try {
+      console.log(`📨 Đang gửi email OTP...`);
+      emailResult = await sendOTPEmail(email, otp, "verification");
+
+      if (emailResult.success) {
+        console.log(`✅ Email đã gửi thành công!`);
+      } else {
+        console.error(`❌ Email thất bại:`, emailResult.error);
       }
-    });
+    } catch (err) {
+      console.error(`❌ Lỗi gửi email:`, err?.message || err);
+      emailResult = { success: false, error: err?.message };
+    }
+
+    console.log(`${"=".repeat(60)}\n`);
 
     const resp = {
-      success: true,
-      message: "OTP đã được gửi (nếu email hợp lệ)",
+      success: emailResult.success,
+      message: emailResult.success
+        ? "OTP đã được gửi đến email của bạn"
+        : "Không thể gửi email. Vui lòng thử lại sau.",
     };
-    if (process.env.NODE_ENV === "development") resp.devOtp = otp;
-    res.status(200).json(resp);
+
+    if (process.env.NODE_ENV === "development") {
+      resp.devOtp = otp;
+      resp.emailError = emailResult.error;
+    }
+
+    return res.status(emailResult.success ? 200 : 500).json(resp);
   } catch (err) {
     console.error("resendOTP error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Lỗi server khi gửi lại OTP" });
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi gửi lại OTP",
+    });
   }
 };
 
