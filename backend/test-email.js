@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config(); // ← THÊM DÒNG NÀY
 const nodemailer = require("nodemailer");
 
 async function testEmail() {
@@ -17,10 +17,10 @@ async function testEmail() {
       : "❌ KHÔNG CÓ"
   );
 
-  const transporter = nodemailer.createTransporter({
+  const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT),
-    secure: false,
+    secure: parseInt(process.env.EMAIL_PORT) === 465, // ← Sửa đây
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -28,8 +28,8 @@ async function testEmail() {
     tls: {
       rejectUnauthorized: false,
     },
-    debug: true, // Enable debug output
-    logger: true, // Log to console
+    debug: true,
+    logger: true,
   });
 
   try {
