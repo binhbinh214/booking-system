@@ -15,7 +15,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
-import VerifyOTP from "./pages/auth/VerifyOTP";
+// VerifyOTP removed
 import ResetPassword from "./pages/auth/ResetPassword";
 
 // Public Pages
@@ -167,7 +167,7 @@ function App() {
           }
         />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/verify-otp" element={<VerifyOTP />} />
+        {/* VerifyOTP route removed */}
         <Route path="/reset-password" element={<ResetPassword />} />
       </Route>
 
