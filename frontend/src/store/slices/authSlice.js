@@ -1,5 +1,5 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import authService from '../../services/auth.service';
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import authService from "../../services/auth.service";
 
 const initialState = {
   user: null,
@@ -13,87 +13,101 @@ const initialState = {
 
 // Async thunks
 export const register = createAsyncThunk(
-  'auth/register',
+  "auth/register",
   async (userData, { rejectWithValue }) => {
     try {
       const response = await authService.register(userData);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Đăng ký thất bại');
+      return rejectWithValue(
+        error.response?.data?.message || "Đăng ký thất bại"
+      );
     }
   }
 );
 
 export const login = createAsyncThunk(
-  'auth/login',
+  "auth/login",
   async (credentials, { rejectWithValue }) => {
     try {
       const response = await authService.login(credentials);
+      console.log("✅ Login response:", response.data);
       return response.data;
     } catch (error) {
+      console.error("❌ Login error:", error.response?.data);
       const data = error.response?.data;
       if (data?.requireVerification) {
-        return rejectWithValue({ 
-          message: data.message, 
+        return rejectWithValue({
+          message: data.message,
           requireVerification: true,
-          email: credentials.email 
+          email: credentials.email,
         });
       }
-      return rejectWithValue(data?.message || 'Đăng nhập thất bại');
+      return rejectWithValue(data?.message || "Đăng nhập thất bại");
     }
   }
 );
 
 export const verifyOTP = createAsyncThunk(
-  'auth/verifyOTP',
+  "auth/verifyOTP",
   async (data, { rejectWithValue }) => {
     try {
       const response = await authService.verifyOTP(data);
+      console.log("✅ Verify OTP response:", response.data);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Xác thực OTP thất bại');
+      console.error("❌ Verify OTP error:", error.response?.data);
+      return rejectWithValue(
+        error.response?.data?.message || "Xác thực OTP thất bại"
+      );
     }
   }
 );
 
 export const forgotPassword = createAsyncThunk(
-  'auth/forgotPassword',
+  "auth/forgotPassword",
   async (email, { rejectWithValue }) => {
     try {
       const response = await authService.forgotPassword(email);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Gửi yêu cầu thất bại');
+      return rejectWithValue(
+        error.response?.data?.message || "Gửi yêu cầu thất bại"
+      );
     }
   }
 );
 
 export const resetPassword = createAsyncThunk(
-  'auth/resetPassword',
+  "auth/resetPassword",
   async (data, { rejectWithValue }) => {
     try {
       const response = await authService.resetPassword(data);
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Đặt lại mật khẩu thất bại');
+      return rejectWithValue(
+        error.response?.data?.message || "Đặt lại mật khẩu thất bại"
+      );
     }
   }
 );
 
 export const getMe = createAsyncThunk(
-  'auth/getMe',
+  "auth/getMe",
   async (_, { rejectWithValue }) => {
     try {
       const response = await authService.getMe();
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Lấy thông tin thất bại');
+      return rejectWithValue(
+        error.response?.data?.message || "Lấy thông tin thất bại"
+      );
     }
   }
 );
 
 const authSlice = createSlice({
-  name: 'auth',
+  name: "auth",
   initialState,
   reducers: {
     logout: (state) => {
@@ -101,7 +115,7 @@ const authSlice = createSlice({
       state.token = null;
       state.isAuthenticated = false;
       state.error = null;
-      localStorage.removeItem('token');
+      localStorage.removeItem("token");
     },
     clearError: (state) => {
       state.error = null;
@@ -135,10 +149,19 @@ const authSlice = createSlice({
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.data.user;
-        state.token = action.payload.data.token;
-        state.isAuthenticated = true;
-        localStorage.setItem('token', action.payload.data.token);
+
+        // Backend response structure: { success: true, token: "...", data: { user: {...} } }
+        const { token, data } = action.payload;
+
+        if (token && data?.user) {
+          state.user = data.user;
+          state.token = token;
+          state.isAuthenticated = true;
+          localStorage.setItem("token", token);
+        } else {
+          console.error("❌ Invalid login response structure:", action.payload);
+          state.error = "Lỗi đăng nhập. Vui lòng thử lại.";
+        }
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
@@ -157,12 +180,24 @@ const authSlice = createSlice({
       })
       .addCase(verifyOTP.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.user = action.payload.data.user;
-        state.token = action.payload.data.token;
-        state.isAuthenticated = true;
-        state.requireVerification = false;
-        state.verificationEmail = null;
-        localStorage.setItem('token', action.payload.data.token);
+
+        // Backend response structure: { success: true, token: "...", data: { user: {...} } }
+        const { token, data } = action.payload;
+
+        if (token && data?.user) {
+          state.user = data.user;
+          state.token = token;
+          state.isAuthenticated = true;
+          state.requireVerification = false;
+          state.verificationEmail = null;
+          localStorage.setItem("token", token);
+        } else {
+          console.error(
+            "❌ Invalid verify OTP response structure:",
+            action.payload
+          );
+          state.error = "Lỗi xác thực. Vui lòng thử lại.";
+        }
       })
       .addCase(verifyOTP.rejected, (state, action) => {
         state.isLoading = false;
@@ -176,7 +211,7 @@ const authSlice = createSlice({
         state.user = null;
         state.token = null;
         state.isAuthenticated = false;
-        localStorage.removeItem('token');
+        localStorage.removeItem("token");
       });
   },
 });
